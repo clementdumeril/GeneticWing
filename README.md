@@ -70,7 +70,9 @@ Known gaps, to close with the lab's data:
 | `geneticwing.evolution` | Real-coded GA, the GA of T. Zohdi's course, CMA-ES; equal-budget interface |
 | `geneticwing.planning.local` | SLSQP on the same genome, single and multi-start, batched finite differences |
 | `geneticwing.policies` | Reactive orbit law (10 parameters) tuned offline by the Zohdi GA |
-| `scenarios/phase2_teacher.py` | The study: 3 scenarios x 3 test instances x 9 methods |
+| `geneticwing.seeding` | Fit a genome to any flight (the law's), to seed the planners |
+| `scenarios/ga_tuning.py` | GA hyperparameter sweep on training instances (population 50 wins) |
+| `scenarios/phase2_teacher.py` | The study: 3 scenarios x 3 test instances x 11 methods |
 
 Cost is the net onboard energy over the horizon (motor energy minus the
 specific energy stored), normalized by level cruise on the motor: `1` means
@@ -80,40 +82,99 @@ counting feasible solutions only.
 
 | Method | S1 thermal | S2 field to goal | S3 ridge |
 | --- | --- | --- | --- |
-| NLP (straight start) | -2.77 (3/3) | infeasible | -2.11 (1/3) |
+| NLP (straight start) | -2.77 | infeasible | -2.11 (1/3) |
 | NLP multi-start | 0.96 (2/3) | infeasible | -2.35 (1/3) |
-| GA | 0.48 | infeasible | -0.15 |
+| GA (tuned, population 50) | 0.15 | infeasible | -0.73 |
 | Zohdi GA | infeasible | infeasible | infeasible |
 | CMA-ES | -0.32 | infeasible | -1.92 |
-| **CMA-ES + NLP** | **-3.80** | infeasible | **-2.16** |
-| GA @100k | -1.44 | 0.96 | -1.72 |
+| CMA-ES + NLP | -3.80 | infeasible | **-2.16** |
+| GA @100k | -0.99 | 0.47 | -1.83 |
 | CMA-ES @100k | -2.14 | 0.78 | -2.10 |
-| **Reactive law (Zohdi-tuned)** | **-4.67** | **-0.15** | -1.98 |
+| Reactive law (Zohdi-tuned) | -4.67 | **-0.15** | -1.98 |
+| **Law + NLP** (seeded) | **-6.08** | infeasible | 0.89 |
+| Law + CMA-ES + NLP (seeded) | -4.44 | infeasible | -2.05 |
 
 ![Trajectories](docs/figures/phase2_trajectories.png)
 ![Convergence](docs/figures/phase2_convergence.png)
 
 What this says about H1:
 
-- **H1 is not supported as stated.** The real-coded GA is the weakest of the
-  working planners at equal budget, and the course's GA (80 % random
-  immigrants each generation) finds nothing feasible in 87 to 159 dimensions.
-- **CMA-ES followed by the local NLP is the best planner**, and the reactive law
-  tuned offline is the best method overall on S1 and S2. The law encodes the
-  orbit structure the planners have to discover.
-- **S2 is hard for every planner**: only the 100k-budget runs reach the goal,
-  and they still need the motor. The fixed horizon with a terminal goal over
-  159 genes is the likely culprit (see next steps).
-- For the teacher of phase 3 this means: **the teacher is a portfolio**
-  (CMA-ES + NLP, the tuned law), as planned in the risk table of the design
-  document. The student does not depend on which optimizer produced the data.
+- **H1 is not supported as stated.** Even tuned, the real-coded GA is the
+  weakest of the working planners at equal budget, and the course's GA (80 %
+  random immigrants each generation) finds nothing feasible in 87 to 159
+  dimensions.
+- **Structure beats search.** The reactive law, tuned offline Zohdi-style,
+  encodes the orbit the planners must otherwise discover. Fitting a genome to
+  its flight and refining it with the NLP gives the best results on S1
+  (-6.08, every instance), 30 % more energy than the law alone.
+- **S2 stays out of reach of the planners at 20k**: the law is the only method
+  that soars there without the motor. The fixed 150 s horizon with a terminal
+  goal over 159 genes is the likely culprit; receding horizon is the fix.
+- On S3 the law's flight is fitted less accurately (20 m), and the NLP from it
+  ends in a poor optimum; CMA-ES + NLP remains the best there.
+- **The teacher is a portfolio** (law + NLP, the law, CMA-ES + NLP), as planned
+  in the risk table of the design document. The student does not depend on
+  which optimizer produced the data.
 
-Caveats: GA hyperparameters are defaults, not tuned; 3 instances per scenario;
-point-mass model; the law knows where the lift is, as the planners do.
+Caveats: 3 instances per scenario; point-mass model; the law knows where the
+lift is, as the planners do.
 
-Next steps for phase 2: seed the planners with the law's flights (fit a genome
-to them, then CMA-ES + NLP), receding-horizon S2 instead of one 150 s plan,
-tuned GA settings, and more instances.
+## Phase 3: generative student (hypotheses H2, H3, H4)
+
+| Module | Content |
+| --- | --- |
+| `geneticwing.benchmarks.s1_family` | Randomized single-thermal family (thermal strength, wind, start); heading-frame context and exact left/right mirror |
+| `geneticwing.benchmarks.with_margins` | Tightened constraints for the teacher (constraint tightening) |
+| `geneticwing.student` | Conditional flow matching (rectified flow), deterministic regression baseline, learned mutation, smoothing |
+| `scenarios/phase3_dataset.py` | Teacher dataset: law flight -> fitted genome -> NLP, both orbit modes, 600 train + 80 test instances |
+| `scenarios/phase3_student.py` | Training and evaluation against the teacher on held-out instances |
+
+Teacher: 1263 solutions; 593 instances with both orbit modes, 77 with one.
+Mean cost -5.43 under the nominal constraints, against -3.97 for the law alone.
+Students: MLP 4 x 512, 20k steps on CPU, trained on the data and its mirror.
+Evaluation on 78 held-out instances (teacher mean cost -5.19):
+
+| Method | Instances solved | Samples feasible | Mean cost | Gap to teacher | Median time |
+| --- | --- | --- | --- | --- | --- |
+| Regression (deterministic) | 0 % | 0 % | - | - | 1 ms |
+| Flow matching, 64 samples, 1 step | 90 % | 17 % | 0.87 | 6.11 | 28 ms |
+| Flow matching, 64 samples, 8 steps | 67 % | 15 % | -2.06 | 3.11 | 49 ms |
+| Flow matching + learned mutations | 74 % | 16 % | -1.95 | 3.31 | 137 ms |
+| Flow matching + mutations + NLP (2000 evals) | 76 % | 75 % | -2.51 | 2.72 | 1.0 s |
+| Reactive law | 100 % | 100 % | -3.69 | 1.50 | feedback law |
+| NLP from straight flight (2000 evals) | 8 % | 8 % | 1.49 | 6.95 | 0.9 s |
+
+![Student](docs/figures/phase3_student.png)
+
+What this says:
+
+- **H3 holds.** The regression network averages the clockwise and
+  counter-clockwise orbits into a straight line out of the thermal (red dashes)
+  and never produces a feasible trajectory. Flow matching samples circle in
+  the thermal, in both directions.
+- **H2 holds only in part.** The student plans in 30 to 50 ms on a laptop CPU
+  and finds a feasible soaring trajectory for 67 to 90 % of new instances, but
+  keeps only about 40 % of the teacher's energy gain, and does not yet beat the
+  reactive law it was partly distilled from.
+- **H4 holds in part.** The NLP warm-started by the student solves 76 % of the
+  instances, against 8 % for the same NLP from straight flight, and narrows
+  the gap; learned mutations bring nothing measurable here.
+- **Feasibility is the bottleneck, as anticipated.** A first teacher solved to
+  the nominal constraints sat exactly on them: keeping 99.4 % of the genome's
+  variance (48 principal components) already broke 80 % of its solutions, and
+  that student solved 25 to 40 % of instances with 3 % feasible samples.
+  Solving the teacher with margins (cost: 0.24 of the 5.4 energy units) made
+  its solutions 8 to 16 times more tolerant to gene noise and gave the numbers
+  above; smoothing the samples took feasibility from 2 to 7 % in a diagnostic.
+
+Caveats: about 1.3k teacher solutions for 87 genes is little data; CPU
+training; point-mass model; the law's time is a simulation cost, as a feedback
+law it runs in microseconds.
+
+Next steps: 10x more teacher data on the cluster, a transformer over control
+points (as in DynFly) or latent flow matching, constraint-aware training,
+DAgger and the self-improvement loop (H6), and the closed-loop evaluation of
+phase 4.
 
 ## Usage
 
@@ -122,6 +183,8 @@ pip install -e ".[dev]"
 python -m pytest
 python scenarios/s0_glide.py --out results
 python scenarios/phase2_teacher.py --out results/phase2 --workers 8
+python scenarios/phase3_dataset.py --train 600 --test 80
+python scenarios/phase3_student.py --steps 20000
 ```
 
 Conventions: ENU frame (z up), SI units, wind is the air-mass velocity.

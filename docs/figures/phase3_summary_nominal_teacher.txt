@@ -1,0 +1,11 @@
+80 test instances, teacher mean cost -5.40
+method                     feasible  samples ok  mean cost  mean gap  median ms
+Regression                       4%          4%       1.67      7.00          1
+FM x32, 1 steps                 40%          4%       1.12      6.58         16
+FM x32, 4 steps                 29%          3%      -0.31      5.17         21
+FM x32, 8 steps                 25%          2%       0.09      5.61         29
+FM x32, 16 steps                28%          3%      -0.51      5.44         47
+FM + mutations                  36%          3%      -0.78      4.99        101
+FM + mutations + NLP            42%         39%      -1.29      4.48        594
+Law (online)                   100%        100%      -3.66      1.74        881
+NLP (online, 1000)               8%          8%       1.49      7.14        472

@@ -99,6 +99,93 @@ def s3_ridge(instance: int = 0) -> SoaringScenario:
 
 SCENARIOS = {"S1": s1_single_thermal, "S2": s2_thermal_field, "S3": s3_ridge}
 
+# Context of the S1 family used to train the student, and its normalization.
+CONTEXT_NAMES = ("dx", "dy", "z", "heading_east", "heading_north", "w_star", "wind_x", "wind_y")
+_CONTEXT_CENTER = np.array([0.0, 0.0, 250.0, 0.0, 0.0, 2.0, 0.0, 0.0])
+_CONTEXT_SCALE = np.array([200.0, 200.0, 70.0, 1.0, 1.0, 0.8, 4.0, 4.0])
+
+
+def s1_family(instance: int) -> tuple[SoaringScenario, np.ndarray]:
+    """Randomized single-thermal scenario and its normalized context vector.
+
+    Thermal strength, wind (speed and direction, the thermal drifting with it)
+    and the start (bearing, distance, altitude, heading) all vary; the thermal
+    is at the origin at t = 0 and the loiter area is centered on it.
+    """
+    rng = np.random.default_rng(50_000 + instance)
+    w_star = rng.uniform(1.2, 2.8)
+    wind_speed, wind_dir = rng.uniform(0.0, 4.0), rng.uniform(0.0, 2.0 * np.pi)
+    wind = np.array([wind_speed * np.cos(wind_dir), wind_speed * np.sin(wind_dir)])
+    bearing, distance = rng.uniform(0.0, 2.0 * np.pi), rng.uniform(60.0, 200.0)
+    start = (distance * np.cos(bearing), distance * np.sin(bearing), rng.uniform(180.0, 320.0))
+    heading = rng.uniform(0.0, 360.0)
+    scenario = SoaringScenario(
+        name="S1 family",
+        aircraft=SBXC_APPROX,
+        wind=UniformWind((wind[0], wind[1], 0.0)) + Thermal(center=(0.0, 0.0), w_star=w_star, drift=tuple(wind)),
+        start=start,
+        heading_deg=heading,
+        airspeed=CRUISE_AIRSPEED,
+        horizon=60.0,
+        mission=LoiterMission(center=(0.0, 0.0), radius=300.0),
+        thrust_max=MOTOR_THRUST,
+        n_control=32,
+    )
+    h = np.radians(heading)
+    raw = np.array([start[0], start[1], start[2], np.sin(h), np.cos(h), w_star, wind[0], wind[1]])
+    return scenario, (raw - _CONTEXT_CENTER) / _CONTEXT_SCALE
+
+
+# The same context, expressed in the aircraft's initial heading frame. The genome
+# is heading-relative (turn rates), so this context is invariant to rotating the
+# whole scene, and mirroring it left/right is exact (see ``mirror``).
+HEADING_CONTEXT_NAMES = ("thermal_ahead", "thermal_left", "z", "w_star", "wind_ahead", "wind_left")
+_HEADING_CENTER = np.array([0.0, 0.0, 250.0, 2.0, 0.0, 0.0])
+_HEADING_SCALE = np.array([200.0, 200.0, 70.0, 0.8, 4.0, 4.0])
+
+
+def heading_frame_context(scenario: SoaringScenario) -> np.ndarray:
+    """Normalized heading-frame context of an S1-family scenario."""
+    parts = scenario.wind.components
+    thermal = next(p for p in parts if isinstance(p, Thermal))
+    wind = next(p for p in parts if isinstance(p, UniformWind)).velocity
+    h = np.radians(scenario.heading_deg)
+    ahead, left = np.array([np.sin(h), np.cos(h)]), np.array([-np.cos(h), np.sin(h)])
+    to_thermal = np.asarray(thermal.center) - np.asarray(scenario.start[:2])
+    w = np.asarray(wind[:2])
+    raw = np.array([to_thermal @ ahead, to_thermal @ left, scenario.start[2], thermal.w_star, w @ ahead, w @ left])
+    return (raw - _HEADING_CENTER) / _HEADING_SCALE
+
+
+def mirror(contexts: np.ndarray, genomes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Left/right mirror image: lateral context terms and turn-rate genes change sign.
+
+    Turn-rate genes are normalized symmetrically around zero, so their sign
+    flip is ``x -> 1 - x``; speed and path-angle genes are unchanged.
+    """
+    c, g = contexts.copy(), genomes.copy()
+    c[:, [1, 5]] *= -1.0
+    g[:, 0::3] = 1.0 - g[:, 0::3]
+    return c, g
+
 
 def with_horizon(scenario: SoaringScenario, horizon: float, n_control: int) -> SoaringScenario:
     return replace(scenario, horizon=horizon, n_control=n_control)
+
+
+def with_margins(scenario: SoaringScenario) -> SoaringScenario:
+    """Tightened constraints for the teacher (constraint tightening, as in robust MPC).
+
+    Optimal solutions sit on their active constraints, so any imitation error
+    breaks them. Solving with margins and judging under the nominal
+    constraints leaves room for the student's errors.
+    """
+    return replace(
+        scenario,
+        cl_margin=0.75,
+        bank_max_deg=38.0,
+        load_max=2.1,
+        thrust_max=0.8 * scenario.thrust_max,
+        brake_capacity=0.03,
+        airspeed_max=0.9 * scenario.airspeed_max,
+    )
