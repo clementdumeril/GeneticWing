@@ -24,6 +24,17 @@ def test_identified_polar_reproduces_the_best_glide_point():
     assert sink == pytest.approx(1.51, rel=0.01)
 
 
+def test_sailplane_geometry_and_performance():
+    from geneticwing.aircraft import SBXC_APPROX
+
+    assert SBXC_APPROX.mass / SBXC_APPROX.wing_area == pytest.approx(3.95, abs=0.01)
+    assert 20.0 < SBXC_APPROX.max_glide_ratio < 35.0
+    # Slowest flyable glide (90 % of C_L max) sinks well under the Stratosurfer's best glide.
+    cl = 0.9 * SBXC_APPROX.cl_max
+    airspeed = np.sqrt(2 * SBXC_APPROX.weight / (SBXC_APPROX.rho * SBXC_APPROX.wing_area * cl))
+    assert SBXC_APPROX.nominal_sink_rate(airspeed) < 0.4
+
+
 def test_steady_glide_balances_forces():
     for bank in (0.0, np.radians(30)):
         gamma, sink, cl = AC.steady_glide(14.0, bank)

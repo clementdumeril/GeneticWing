@@ -107,3 +107,20 @@ STRATOSURFER_APPROX = Aircraft(
     cl_max=1.1,  # placeholder
     max_thrust=8.0,  # N, placeholder
 )
+
+
+# SB-XC, a 4.6 m RC sailplane used as a soaring UAV in the literature. Mass,
+# wing area and aspect ratio come from the Model Aviation review (Sept. 1992):
+# 9.3 lb, 1656 sq in, AR 19.8. No polar is published: C_D0 and the Oswald
+# factor below are engineering estimates to refine (XFLR5 or glide tests).
+_SBXC_ASPECT_RATIO = 19.8
+_SBXC_OSWALD = 0.85  # estimate
+
+SBXC_APPROX = Aircraft(
+    name="SB-XC sailplane (estimated polar)",
+    mass=9.3 * 0.45359237,
+    wing_area=1656 * 0.0254**2,
+    cd0=0.018,  # estimate
+    k=1.0 / (np.pi * _SBXC_ASPECT_RATIO * _SBXC_OSWALD),
+    cl_max=1.2,  # estimate
+)

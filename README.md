@@ -17,7 +17,7 @@ energy-aware NMPC.
 | Module | Content |
 | --- | --- |
 | `geneticwing.bernstein` | Bernstein segments and chains, derivatives, batch evaluation |
-| `geneticwing.aircraft` | Point-mass airframe, parabolic polar, exact steady glide |
+| `geneticwing.aircraft` | Point-mass airframe, parabolic polar, exact steady glide; Stratosurfer (ARPL platform, placeholder mass and area) and SB-XC sailplane (estimated polar) |
 | `geneticwing.flatness` | Flat map: trajectory + wind -> airspeed, C_L, bank, load factor, T_req |
 | `geneticwing.energy` | Specific energy, netto variometer |
 | `geneticwing.wind` | Level-N1 winds: uniform, thermal (Allen scaling), ridge lift, Dryden turbulence |
