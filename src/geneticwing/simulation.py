@@ -48,10 +48,23 @@ class TrackerConfig:
 
 
 def _air_frame(v_air: np.ndarray):
-    v_hat = v_air / max(np.linalg.norm(v_air), 1e-9)
-    up_perp = _UP - (_UP @ v_hat) * v_hat
-    up_perp /= max(np.linalg.norm(up_perp), 1e-9)
+    """Unit air velocity, 'up' normal to it, and right wing direction; batched over ``(..., 3)``."""
+    v_hat = v_air / np.maximum(np.linalg.norm(v_air, axis=-1, keepdims=True), 1e-9)
+    up_perp = _UP - np.sum(_UP * v_hat, axis=-1, keepdims=True) * v_hat
+    up_perp /= np.maximum(np.linalg.norm(up_perp, axis=-1, keepdims=True), 1e-9)
     return v_hat, up_perp, np.cross(v_hat, up_perp)
+
+
+def aerodynamic_acceleration(
+    aircraft: Aircraft, v_air: np.ndarray, cl: np.ndarray, bank: np.ndarray, thrust: np.ndarray
+) -> np.ndarray:
+    """Inertial acceleration of the point mass for given lift coefficient, bank and thrust (batched)."""
+    v_hat, up_perp, right = _air_frame(v_air)
+    q_s = aircraft.dynamic_pressure(np.linalg.norm(v_air, axis=-1)) * aircraft.wing_area
+    cl, bank, thrust = (np.asarray(x, dtype=float)[..., None] for x in (cl, bank, thrust))
+    lift = q_s[..., None] * cl * (np.cos(bank) * up_perp + np.sin(bank) * right)
+    drag = q_s[..., None] * aircraft.drag_coefficient(cl)
+    return (lift + (thrust - drag) * v_hat) / aircraft.mass - aircraft.g * _UP
 
 
 def simulate_tracking(
@@ -107,12 +120,7 @@ def simulate_tracking(
         bank += np.clip(bank_step, -bank_rate_max * dt, bank_rate_max * dt)
         thrust = np.clip(float(c.thrust_required), 0.0, aircraft.max_thrust) if config.powered else 0.0
 
-        v_air = v[k] - w
-        v_hat, up_perp, right = _air_frame(v_air)
-        q_s = aircraft.dynamic_pressure(np.linalg.norm(v_air)) * aircraft.wing_area
-        lift = q_s * cl * (np.cos(bank) * up_perp + np.sin(bank) * right)
-        drag = q_s * aircraft.drag_coefficient(cl)
-        acc[k] = (lift + (thrust - drag) * v_hat) / aircraft.mass - aircraft.g * _UP
+        acc[k] = aerodynamic_acceleration(aircraft, v[k] - w, cl, bank, thrust)
 
         passed_end = idx == last and (p[k] - reference.position[last]) @ end_tangent >= 0.0
         if passed_end or k == steps:
