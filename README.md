@@ -187,5 +187,36 @@ python scenarios/phase3_dataset.py --train 600 --test 80
 python scenarios/phase3_student.py --steps 20000
 ```
 
+## Running phase 3 at scale on Savio (Berkeley)
+
+The teacher's dataset is the expensive part (about 20 core-seconds per
+instance) and splits into independent shards; the students train on GPU.
+`slurm/submit_all.sh` chains four jobs: tune the law once, solve the shards
+(one node each, plus one for the test set), merge, then train and evaluate one
+student per training-set size (the scaling study). With the defaults, 15k
+training instances cost about 80 core-hours of CPU and five short GPU jobs.
+
+On a login node, once:
+
+```bash
+git clone https://github.com/clementdumeril/GeneticWing.git
+cd GeneticWing
+bash slurm/check_savio.sh      # prints your accounts, partitions, QoS and GPU types
+nano slurm/config.sh           # set ACCOUNT, the CPU/GPU partitions and QoS, the Python module
+bash slurm/setup_env.sh        # venv in /global/scratch/users/$USER/geneticwing
+```
+
+Then:
+
+```bash
+bash slurm/submit_all.sh       # law -> shards -> merge -> students
+squeue -u $USER
+bash slurm/submit_all.sh train # later: retrain only, on the merged dataset
+```
+
+Results land in `/global/scratch/users/$USER/geneticwing/phase3/students/n_<size>/`
+and logs in `.../phase3/logs/`. Sizes, shard counts, budgets and walltimes are
+all in `slurm/config.sh`.
+
 Conventions: ENU frame (z up), SI units, wind is the air-mass velocity.
 Arrays are `(..., N, 3)` so populations evaluate in one call.
