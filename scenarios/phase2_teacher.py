@@ -5,13 +5,16 @@ same straight-flight seed and the same evaluation budget:
 
 * NLP          - SLSQP from the straight-flight genome (ARPL-style local planner)
 * NLP-multi    - SLSQP restarted from the seed then random genomes
-* GA           - real-coded GA (SBX, polynomial mutation)
+* GA           - real-coded GA (SBX, polynomial mutation), population 50 after
+                 the sweep of ``scenarios/ga_tuning.py``
 * ZohdiGA      - the scheme of T. Zohdi's GA course
 * CMA-ES       - covariance matrix adaptation
 * CMA-ES+NLP   - half the budget for CMA-ES, then SLSQP from its best
 * GA@100k, CMA-ES@100k - the evolutionary methods with 5x the budget
 * Law          - the reactive orbit law tuned offline by ZohdiGA on separate
                  training instances (the "a la Zohdi" baseline)
+* Law+NLP, Law+CMA-ES+NLP - the planners seeded with a genome fitted to the
+                 law's flight (the fit itself is not counted in the budget)
 
 Run: ``python scenarios/phase2_teacher.py [--out results/phase2] [--workers 8]``
 """
@@ -35,6 +38,7 @@ from geneticwing.benchmarks import SCENARIOS  # noqa: E402
 from geneticwing.evolution import CMAES, RealGA, ZohdiGA  # noqa: E402
 from geneticwing.planning.local import multistart, single_start, solve_local  # noqa: E402
 from geneticwing.policies import simulate_law, tune_law  # noqa: E402
+from geneticwing.seeding import fit_genome  # noqa: E402
 from geneticwing.soaring import SoaringProblem  # noqa: E402
 
 BUDGET = 20_000
@@ -43,6 +47,7 @@ TEST_INSTANCES = (0, 1, 2)
 TRAIN_INSTANCES = (100, 101, 102)
 LAW_BUDGET = 1_200
 CMA_POPULATION = 32
+GA_POPULATION = 50
 
 
 def cma_then_nlp(problem, budget, rng, seeds):
@@ -58,14 +63,18 @@ def cma_then_nlp(problem, budget, rng, seeds):
 PLANNERS = {
     "NLP": lambda pb, rng, seeds: single_start(pb, BUDGET, seeds=seeds),
     "NLP-multi": lambda pb, rng, seeds: multistart(pb, BUDGET, rng, seeds),
-    "GA": lambda pb, rng, seeds: RealGA().minimize(pb.fitness, pb.dim, BUDGET, rng, seeds),
+    "GA": lambda pb, rng, seeds: RealGA(population=GA_POPULATION).minimize(pb.fitness, pb.dim, BUDGET, rng, seeds),
     "ZohdiGA": lambda pb, rng, seeds: ZohdiGA().minimize(pb.fitness, pb.dim, BUDGET, rng, seeds),
     "CMA-ES": lambda pb, rng, seeds: CMAES(population=CMA_POPULATION).minimize(pb.fitness, pb.dim, BUDGET, rng, seeds),
     "CMA-ES+NLP": lambda pb, rng, seeds: cma_then_nlp(pb, BUDGET, rng, seeds),
-    "GA@100k": lambda pb, rng, seeds: RealGA().minimize(pb.fitness, pb.dim, LARGE_BUDGET, rng, seeds),
+    "GA@100k": lambda pb, rng, seeds: RealGA(population=GA_POPULATION).minimize(
+        pb.fitness, pb.dim, LARGE_BUDGET, rng, seeds
+    ),
     "CMA-ES@100k": lambda pb, rng, seeds: CMAES(population=CMA_POPULATION).minimize(
         pb.fitness, pb.dim, LARGE_BUDGET, rng, seeds
     ),
+    "Law+NLP": lambda pb, rng, seeds: single_start(pb, BUDGET, seeds=seeds),
+    "Law+CMA-ES+NLP": lambda pb, rng, seeds: cma_then_nlp(pb, BUDGET, rng, seeds),
 }
 
 
@@ -81,10 +90,14 @@ def summarize(problem: SoaringProblem, ev, index: int = 0) -> dict:
 
 
 def run_planner(job):
-    scenario_key, instance, method = job
+    scenario_key, instance, method, theta = job
     problem = SoaringProblem(SCENARIOS[scenario_key](instance))
     rng = np.random.default_rng(10_000 * instance + list(PLANNERS).index(method))
     seeds = problem.straight_genome()[None]
+    if method.startswith("Law+"):
+        flight = simulate_law(problem, np.asarray(theta)[None]).state
+        law_genome = fit_genome(problem, flight.t[0], flight.position[0])
+        seeds = np.vstack([law_genome, seeds])
     start = time.perf_counter()
     result = PLANNERS[method](problem, rng, seeds)
     elapsed = time.perf_counter() - start
@@ -130,14 +143,14 @@ def table(rows: list[dict]) -> str:
     lines = []
     for sc in SCENARIOS:
         lines.append(f"\n{sc}  (cost: 1 = level cruise on the motor, < 0 = net energy gain)")
-        lines.append(f"{'method':<13}{'mean cost':>10}{'best':>8}{'feasible':>10}{'alt gain (m)':>14}{'E_prop (Wh)':>13}{'time (s)':>10}")
+        lines.append(f"{'method':<16}{'mean cost':>10}{'best':>8}{'feasible':>10}{'alt gain (m)':>14}{'E_prop (Wh)':>13}{'time (s)':>10}")
         for m in methods:
             rs = [r for r in rows if r["scenario"] == sc and r["method"] == m]
             if not rs:
                 continue
             cost = [r["cost"] if r["feasible"] else np.nan for r in rs]
             lines.append(
-                f"{m:<13}{np.nanmean(cost) if np.any(np.isfinite(cost)) else float('nan'):>10.2f}"
+                f"{m:<16}{np.nanmean(cost) if np.any(np.isfinite(cost)) else float('nan'):>10.2f}"
                 f"{np.nanmin(cost) if np.any(np.isfinite(cost)) else float('nan'):>8.2f}"
                 f"{sum(r['feasible'] for r in rs):>7}/{len(rs)}"
                 f"{np.mean([r['altitude_gain_m'] for r in rs]):>14.1f}"
@@ -162,7 +175,7 @@ def plot(rows: list[dict], out: Path) -> None:
 
     from geneticwing.policies import lift_anchors
 
-    methods = ["NLP", "GA", "CMA-ES", "CMA-ES+NLP", "CMA-ES@100k", "Law"]
+    methods = ["NLP", "GA", "CMA-ES+NLP", "CMA-ES@100k", "Law", "Law+NLP"]
     fig, axes = plt.subplots(2, 3, figsize=(16, 9), constrained_layout=True)
     for col, sc in enumerate(SCENARIOS):
         problem = SoaringProblem(SCENARIOS[sc](0))
@@ -216,19 +229,21 @@ def main() -> None:
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
-    jobs = [(sc, inst, m) for sc in SCENARIOS for inst in TEST_INSTANCES for m in PLANNERS]
-    # Longest jobs first so the pool stays busy.
-    jobs.sort(key=lambda j: ("100k" not in j[2], j[0] != "S2"))
     start = time.perf_counter()
     rows = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        law_futures = [pool.submit(run_law, sc) for sc in SCENARIOS]
+        # The law is tuned first: the seeded planners start from its flights.
+        for law_rows in pool.map(run_law, SCENARIOS):
+            rows.extend(law_rows)
+        thetas = {r["scenario"]: r["theta"] for r in rows}
+        print(f"[{time.perf_counter() - start:6.0f}s] laws tuned", flush=True)
+        jobs = [(sc, inst, m, thetas[sc]) for sc in SCENARIOS for inst in TEST_INSTANCES for m in PLANNERS]
+        # Longest jobs first so the pool stays busy.
+        jobs.sort(key=lambda j: ("100k" not in j[2], j[0] != "S2"))
         for row in pool.map(run_planner, jobs):
             rows.append(row)
-            print(f"[{time.perf_counter() - start:6.0f}s] {row['scenario']} #{row['instance']} {row['method']:<12} "
+            print(f"[{time.perf_counter() - start:6.0f}s] {row['scenario']} #{row['instance']} {row['method']:<14} "
                   f"cost={row['cost']:7.2f} feasible={row['feasible']}", flush=True)
-        for f in law_futures:
-            rows.extend(f.result())
 
     (args.out / "phase2_results.json").write_text(json.dumps(rows, indent=1))
     summary = table(rows)
