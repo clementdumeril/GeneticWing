@@ -17,7 +17,9 @@ the data plus its left/right mirror image (an exact symmetry of the problem).
 Cost: net onboard energy normalized by level cruise on the motor (< 0 = gain).
 Gap: method cost minus teacher cost on the same instance (> 0 = worse).
 
-Run: ``python scenarios/phase3_student.py [--steps 20000]`` (after phase3_dataset.py)
+Run: ``python scenarios/phase3_student.py [--steps 20000]`` (after phase3_dataset.py).
+Scaling study: ``--max-train N`` keeps the first N training instances (both
+orbit modes of each), ``--tag`` names the output folder, ``--device cuda``.
 """
 
 from __future__ import annotations
@@ -106,21 +108,37 @@ def main() -> None:
     parser.add_argument("--data", type=Path, default=Path("results/phase3/dataset.npz"))
     parser.add_argument("--steps", type=int, default=20_000)
     parser.add_argument("--out", type=Path, default=Path("results/phase3"))
+    parser.add_argument("--tag", default="", help="sub-folder of --out for this run")
+    parser.add_argument("--device", default="auto", help="auto, cpu or cuda")
+    parser.add_argument("--max-train", type=int, help="number of training instances to use (default: all)")
+    parser.add_argument("--width", type=int, default=512)
+    parser.add_argument("--depth", type=int, default=4)
+    parser.add_argument("--batch", type=int, default=256)
+    parser.add_argument("--max-test", type=int, help="number of test instances to evaluate (default: all)")
+    parser.add_argument("--threads", type=int, default=8)
     args = parser.parse_args()
-    torch.set_num_threads(8)
+    if args.tag:
+        args.out = args.out / args.tag
+    torch.set_num_threads(args.threads)
 
     d = np.load(args.data)
     train = d["rec_split"] == "train"
+    if args.max_train is not None:
+        kept = np.unique(d["rec_instance"][train])[: args.max_train]
+        train &= np.isin(d["rec_instance"], kept)
+    n_train_instances = len(np.unique(d["rec_instance"][train]))
     genomes, contexts = d["rec_genome"][train], d["rec_heading_context"][train]
     mirrored_c, mirrored_g = mirror(contexts, genomes)
     genomes, contexts = np.vstack([genomes, mirrored_g]), np.vstack([contexts, mirrored_c])
     dim, cdim = genomes.shape[1], contexts.shape[1]
-    print(f"training on {len(genomes)} teacher solutions (with mirrors), genome dim {dim}, context dim {cdim}")
+    print(f"training on {n_train_instances} instances, {len(genomes)} teacher solutions (with mirrors), "
+          f"genome dim {dim}, context dim {cdim}")
 
-    fm = FlowMatchingStudent(dim, cdim)
-    log_fm = fm.fit(genomes, contexts, steps=args.steps)
-    reg = RegressionStudent(dim, cdim)
-    log_reg = reg.fit(genomes, contexts, steps=args.steps)
+    fm = FlowMatchingStudent(dim, cdim, args.width, args.depth, device=args.device)
+    print(f"device: {fm.device}", flush=True)
+    log_fm = fm.fit(genomes, contexts, steps=args.steps, batch=args.batch)
+    reg = RegressionStudent(dim, cdim, args.width, args.depth, device=args.device)
+    log_reg = reg.fit(genomes, contexts, steps=args.steps, batch=args.batch)
     print(f"flow matching: {log_fm.seconds:.0f}s, final loss {np.mean(log_fm.losses[-200:]):.3f}; "
           f"regression: {log_reg.seconds:.0f}s, final loss {np.mean(log_reg.losses[-200:]):.3f}")
     args.out.mkdir(parents=True, exist_ok=True)
@@ -130,8 +148,10 @@ def main() -> None:
     torch.set_num_threads(1)
 
     teacher = dict(zip(d["teacher_instance"].tolist(), d["teacher_best_cost"].tolist()))
-    test_instances = sorted(set(d["teacher_instance"].tolist()) - set(d["rec_instance"][train].tolist()))
-    test_instances = [i for i in test_instances if np.isfinite(teacher[i])]
+    test_instances = sorted(set(d["rec_instance"][d["rec_split"] == "test"].tolist()))
+    test_instances = [i for i in test_instances if np.isfinite(teacher[i])][: args.max_test]
+    if not test_instances:
+        raise SystemExit("no test instance with a feasible teacher solution in the dataset")
     rng = np.random.default_rng(0)
     results = {}
     for k, instance in enumerate(test_instances):
@@ -166,7 +186,9 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "phase3_summary.txt").write_text(text)
     (args.out / "phase3_summary.json").write_text(json.dumps(
-        {"training": {"fm_seconds": log_fm.seconds, "reg_seconds": log_reg.seconds, "steps": args.steps},
+        {"training": {"fm_seconds": log_fm.seconds, "reg_seconds": log_reg.seconds, "steps": args.steps,
+                      "train_instances": n_train_instances, "train_solutions": len(genomes),
+                      "width": args.width, "depth": args.depth, "device": str(fm.device)},
          "methods": summary}, indent=1))
     plot(fm, reg, d, test_instances, results, teacher, args.out, log_fm, log_reg)
 

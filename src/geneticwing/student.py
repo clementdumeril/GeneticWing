@@ -13,6 +13,7 @@ regression baseline (``c -> x``, mean squared error) does (hypothesis H3).
 
 Genomes are standardized with the training mean and spread; generated
 genomes are mapped back and clipped to the unit box of the gene bounds.
+Both students train and sample on ``device`` ("cpu", "cuda", or "auto").
 """
 
 from __future__ import annotations
@@ -77,30 +78,38 @@ class TrainingLog:
     seconds: float
 
 
+def resolve_device(device: str = "auto") -> torch.device:
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    return torch.device(device)
+
+
 def _batches(n: int, batch: int, steps: int, rng: np.random.Generator):
     for _ in range(steps):
         yield rng.integers(0, n, size=batch)
 
 
 class FlowMatchingStudent:
-    def __init__(self, dim: int, context_dim: int, width: int = 512, depth: int = 4, seed: int = 0):
+    def __init__(self, dim: int, context_dim: int, width: int = 512, depth: int = 4, seed: int = 0, device: str = "auto"):
         torch.manual_seed(seed)
-        self.model = VelocityField(dim, context_dim, width, depth)
+        self.device = resolve_device(device)
+        self.model = VelocityField(dim, context_dim, width, depth).to(self.device)
         self.scaler: Standardizer | None = None
         self.dim = dim
 
     def fit(self, genomes, contexts, steps=20_000, batch=256, lr=1e-3, seed=0) -> TrainingLog:
         self.scaler = Standardizer.fit(genomes)
-        x1_all = torch.as_tensor(self.scaler.forward(genomes), dtype=torch.float32)
-        c_all = torch.as_tensor(contexts, dtype=torch.float32)
+        x1_all = torch.as_tensor(self.scaler.forward(genomes), dtype=torch.float32, device=self.device)
+        c_all = torch.as_tensor(contexts, dtype=torch.float32, device=self.device)
         opt = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-4)
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
         rng, losses, start = np.random.default_rng(seed), [], time.perf_counter()
         self.model.train()
         for idx in _batches(len(x1_all), batch, steps, rng):
+            idx = torch.as_tensor(idx, device=self.device)
             x1, c = x1_all[idx], c_all[idx]
             x0 = torch.randn_like(x1)
-            t = torch.rand(len(x1))
+            t = torch.rand(len(x1), device=self.device)
             xt = (1 - t[:, None]) * x0 + t[:, None] * x1
             loss = torch.mean((self.model(xt, t, c) - (x1 - x0)) ** 2)
             opt.zero_grad()
@@ -114,13 +123,13 @@ class FlowMatchingStudent:
     @torch.no_grad()
     def integrate(self, z: np.ndarray, contexts: np.ndarray, t0: float = 0.0, n_steps: int = 8) -> np.ndarray:
         """Euler integration of the flow from ``t0`` to 1, in standardized space."""
-        x = torch.as_tensor(z, dtype=torch.float32)
-        c = torch.as_tensor(contexts, dtype=torch.float32)
+        x = torch.as_tensor(z, dtype=torch.float32, device=self.device)
+        c = torch.as_tensor(contexts, dtype=torch.float32, device=self.device)
         ts = np.linspace(t0, 1.0, n_steps + 1)
         for a, b in zip(ts[:-1], ts[1:]):
-            t = torch.full((len(x),), float(a))
+            t = torch.full((len(x),), float(a), device=self.device)
             x = x + (b - a) * self.model(x, t, c)
-        return x.numpy()
+        return x.cpu().numpy()
 
     def sample(self, context: np.ndarray, n: int, n_steps: int = 8, rng: np.random.Generator | None = None) -> np.ndarray:
         """``n`` genomes (unit box) for one context."""
@@ -154,20 +163,22 @@ def smooth_genomes(genomes: np.ndarray, width: int = 3, genes_per_point: int = 3
 class RegressionStudent:
     """Deterministic baseline: one genome per context, trained with mean squared error."""
 
-    def __init__(self, dim: int, context_dim: int, width: int = 512, depth: int = 4, seed: int = 0):
+    def __init__(self, dim: int, context_dim: int, width: int = 512, depth: int = 4, seed: int = 0, device: str = "auto"):
         torch.manual_seed(seed)
-        self.model = _mlp(context_dim, dim, width, depth)
+        self.device = resolve_device(device)
+        self.model = _mlp(context_dim, dim, width, depth).to(self.device)
         self.scaler: Standardizer | None = None
 
     def fit(self, genomes, contexts, steps=20_000, batch=256, lr=1e-3, seed=0) -> TrainingLog:
         self.scaler = Standardizer.fit(genomes)
-        y_all = torch.as_tensor(self.scaler.forward(genomes), dtype=torch.float32)
-        c_all = torch.as_tensor(contexts, dtype=torch.float32)
+        y_all = torch.as_tensor(self.scaler.forward(genomes), dtype=torch.float32, device=self.device)
+        c_all = torch.as_tensor(contexts, dtype=torch.float32, device=self.device)
         opt = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-4)
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
         rng, losses, start = np.random.default_rng(seed), [], time.perf_counter()
         self.model.train()
         for idx in _batches(len(y_all), batch, steps, rng):
+            idx = torch.as_tensor(idx, device=self.device)
             loss = torch.mean((self.model(c_all[idx]) - y_all[idx]) ** 2)
             opt.zero_grad()
             loss.backward()
@@ -179,5 +190,5 @@ class RegressionStudent:
 
     @torch.no_grad()
     def predict(self, context: np.ndarray) -> np.ndarray:
-        y = self.model(torch.as_tensor(context[None], dtype=torch.float32)).numpy()
+        y = self.model(torch.as_tensor(context[None], dtype=torch.float32, device=self.device)).cpu().numpy()
         return self.scaler.inverse(y)
