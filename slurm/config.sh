@@ -2,22 +2,25 @@
 # Fill the values from the output of  bash slurm/check_savio.sh  (run on a login node).
 
 # --- Account and partitions -------------------------------------------------
-ACCOUNT="fc_CHANGEME"            # your allowance, e.g. fc_xxx, co_xxx or ac_xxx
+ACCOUNT="ic_piml"
 
 # CPU nodes, for the teacher (whole nodes, all cores used by one job).
+# Savio bills the whole node, but SLURM only gives the job the cores it asks
+# for: without CPU_CORES the job sees 1 core and runs 32 times slower.
 CPU_PARTITION="savio3"
 CPU_QOS="savio_normal"
+CPU_CORES=32                     # cores per savio3 node (check_savio.sh, CPUS column)
 
 # GPU nodes, for the students. The QoS and the GPU type go together on Savio:
 # take a matching pair from check_savio.sh (examples: A40 / a40_gpu3_normal,
 # GTX2080TI / gtx2080_gpu3_normal). CPUs per GPU are fixed per GPU type.
 GPU_PARTITION="savio3_gpu"
-GPU_QOS="a40_gpu3_normal"
+GPU_QOS="a40_gpu3_ica"
 GPU_GRES="gpu:A40:1"
 GPU_CPUS=8
 
 # --- Software ---------------------------------------------------------------
-PYTHON_MODULE="python"           # see `module avail python`; needs Python >= 3.11
+PYTHON_MODULE="python/3.11.6-gcc-11.4.0"
 WORK="/global/scratch/users/${USER}/geneticwing"   # venv, data and results live here
 VENV="${WORK}/venv"
 

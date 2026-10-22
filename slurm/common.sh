@@ -7,3 +7,6 @@ export PYTHONUNBUFFERED=1
 DATA="${WORK}/phase3"
 mkdir -p "$DATA/shards" "$DATA/logs"
 echo "job ${SLURM_JOB_ID:-local} on $(hostname), $(nproc) cores, $(date)"
+if [ -n "${SLURM_JOB_ID:-}" ] && [ "$(nproc)" -lt "${SLURM_CPUS_PER_TASK:-1}" ]; then
+    echo "warning: SLURM granted ${SLURM_CPUS_PER_TASK} CPUs but only $(nproc) are visible" >&2
+fi
