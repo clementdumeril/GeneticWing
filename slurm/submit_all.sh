@@ -13,7 +13,7 @@ if [[ "$ACCOUNT" == *CHANGEME* ]]; then
     exit 1
 fi
 
-cpu=(--account="$ACCOUNT" --partition="$CPU_PARTITION" --qos="$CPU_QOS")
+cpu=(--account="$ACCOUNT" --partition="$CPU_PARTITION" --qos="$CPU_QOS" --cpus-per-task="$CPU_CORES")
 gpu=(--account="$ACCOUNT" --partition="$GPU_PARTITION" --qos="$GPU_QOS" --gres="$GPU_GRES" --cpus-per-task="$GPU_CPUS")
 logs="${WORK}/phase3/logs"
 mkdir -p "$logs"
