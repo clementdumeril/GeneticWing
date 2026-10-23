@@ -18,6 +18,12 @@ GPU_PARTITION="savio3_gpu"
 GPU_QOS="a40_gpu3_ica"
 GPU_GRES="gpu:A40:1"
 GPU_CPUS=8
+# Alternative when the A40 queue is long (more nodes):
+#   GPU_PARTITION="savio4_gpu"; GPU_QOS="a5k_gpu4_ica"; GPU_GRES="gpu:A5000:1"; GPU_CPUS=4
+
+# Where the students train: "gpu" (settings above) or "cpu" (one whole CPU node).
+# The student is a small network; a 32-core node trains it in minutes.
+TRAIN_ON="gpu"
 
 # --- Software ---------------------------------------------------------------
 PYTHON_MODULE="python/3.11.6-gcc-11.4.0"
@@ -44,3 +50,10 @@ TIME_LAW="00:30:00"
 TIME_SHARD="02:00:00"
 TIME_MERGE="00:20:00"
 TIME_TRAIN="04:00:00"
+
+# --- Latent GA (bash slurm/submit_all.sh latent) ------------------------------
+LATENT_DIMS=(8 16 32)
+LATENT_STEPS=20000
+LATENT_ROUNDS=3                  # improvement-loop rounds
+LOOP_SOLUTIONS=2000              # teacher labels revisited per round
+TIME_LATENT="03:00:00"
