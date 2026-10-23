@@ -6,4 +6,4 @@
 set -euo pipefail
 source slurm/common.sh
 
-python scenarios/phase3_merge.py "$DATA/shards" --out "$DATA/dataset.npz"
+run python scenarios/phase3_merge.py "$DATA/shards" --out "$DATA/dataset.npz"

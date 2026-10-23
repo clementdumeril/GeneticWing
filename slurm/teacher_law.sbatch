@@ -6,4 +6,4 @@
 set -euo pipefail
 source slurm/common.sh
 
-python scenarios/phase3_dataset.py --tune-law-only --out "$DATA"
+run python scenarios/phase3_dataset.py --tune-law-only --out "$DATA"
