@@ -4,6 +4,7 @@
 # From the repository root on a login node:
 #   bash slurm/submit_all.sh            # everything
 #   bash slurm/submit_all.sh train      # only the students (dataset already merged)
+#   bash slurm/submit_all.sh latent     # only the latent GA (dataset already merged)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source slurm/config.sh
@@ -15,6 +16,11 @@ fi
 
 cpu=(--account="$ACCOUNT" --partition="$CPU_PARTITION" --qos="$CPU_QOS" --cpus-per-task="$CPU_CORES")
 gpu=(--account="$ACCOUNT" --partition="$GPU_PARTITION" --qos="$GPU_QOS" --gres="$GPU_GRES" --cpus-per-task="$GPU_CPUS")
+if [ "$TRAIN_ON" = "cpu" ]; then
+    train_res=("${cpu[@]}")
+else
+    train_res=("${gpu[@]}")
+fi
 logs="${WORK}/phase3/logs"
 mkdir -p "$logs"
 
@@ -26,8 +32,13 @@ submit() {  # sbatch wrapper that prints and returns the job id
 }
 
 n_sizes=${#TRAIN_SIZES[@]}
+if [ "${1:-all}" = "latent" ]; then
+    latent=$(submit "${cpu[@]}" --time="$TIME_LATENT" --output="$logs/%x-%j.out" slurm/latent.sbatch)
+    echo "latent GA: job $latent (results in ${WORK}/phase3/latent)"
+    exit 0
+fi
 if [ "${1:-all}" = "train" ]; then
-    train=$(submit "${gpu[@]}" --time="$TIME_TRAIN" --array=0-$((n_sizes - 1)) \
+    train=$(submit "${train_res[@]}" --time="$TIME_TRAIN" --array=0-$((n_sizes - 1)) \
         --output="$logs/%x-%A_%a.out" slurm/train.sbatch)
     echo "students: job $train (array 0-$((n_sizes - 1)): ${TRAIN_SIZES[*]})"
     exit 0
@@ -41,7 +52,7 @@ echo "teacher:  job $shards (array 0-$N_SHARDS, the last task is the test set)"
 merge=$(submit "${cpu[@]}" --time="$TIME_MERGE" --dependency=afterok:"$shards" \
     --output="$logs/%x-%j.out" slurm/merge.sbatch)
 echo "merge:    job $merge"
-train=$(submit "${gpu[@]}" --time="$TIME_TRAIN" --array=0-$((n_sizes - 1)) \
+train=$(submit "${train_res[@]}" --time="$TIME_TRAIN" --array=0-$((n_sizes - 1)) \
     --dependency=afterok:"$merge" --output="$logs/%x-%A_%a.out" slurm/train.sbatch)
 echo "students: job $train (array 0-$((n_sizes - 1)): ${TRAIN_SIZES[*]})"
 echo
