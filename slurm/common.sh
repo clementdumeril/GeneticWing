@@ -6,7 +6,16 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export PYTHONUNBUFFERED=1
 DATA="${WORK}/phase3"
 mkdir -p "$DATA/shards" "$DATA/logs"
-echo "job ${SLURM_JOB_ID:-local} on $(hostname), $(nproc) cores, $(date)"
-if [ -n "${SLURM_JOB_ID:-}" ] && [ "$(nproc)" -lt "${SLURM_CPUS_PER_TASK:-1}" ]; then
-    echo "warning: SLURM granted ${SLURM_CPUS_PER_TASK} CPUs but only $(nproc) are visible" >&2
-fi
+
+# On Savio the batch script itself stays pinned to one core even when the job
+# holds more: only a job step started by srun sees them all. So every program
+# runs through `run`, and CORES comes from what SLURM granted, not from nproc.
+CORES=${SLURM_CPUS_PER_TASK:-$(nproc)}
+run() {
+    if [ -n "${SLURM_JOB_ID:-}" ]; then
+        srun --ntasks=1 --cpus-per-task="$CORES" --cpu-bind=none "$@"
+    else
+        "$@"
+    fi
+}
+echo "job ${SLURM_JOB_ID:-local} on $(hostname), $CORES cores granted, $(run nproc) visible to programs, $(date)"

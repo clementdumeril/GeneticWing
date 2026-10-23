@@ -77,7 +77,7 @@ class ConditionalVAE:
             loss.backward()
             opt.step()
             sched.step()
-            losses.append(float(loss))
+            losses.append(loss.item())
         return TrainingLog(losses, time.perf_counter() - start)
 
     @torch.no_grad()

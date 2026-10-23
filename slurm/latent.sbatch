@@ -8,6 +8,6 @@
 set -euo pipefail
 source slurm/common.sh
 
-python scenarios/phase3_latent.py --data "$DATA/dataset.npz" --out "$DATA/latent" \
+run python scenarios/phase3_latent.py --data "$DATA/dataset.npz" --out "$DATA/latent" \
     --latent-dims ${LATENT_DIMS[@]} --rounds "$LATENT_ROUNDS" --loop-solutions "$LOOP_SOLUTIONS" \
-    --steps "$LATENT_STEPS" --workers "$(nproc)" --threads "$(nproc)" --device cpu
+    --steps "$LATENT_STEPS" --workers "$CORES" --threads "$CORES" --device cpu

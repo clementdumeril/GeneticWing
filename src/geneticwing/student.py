@@ -116,7 +116,7 @@ class FlowMatchingStudent:
             loss.backward()
             opt.step()
             sched.step()
-            losses.append(float(loss))
+            losses.append(loss.item())
         self.model.eval()
         return TrainingLog(losses, time.perf_counter() - start)
 
@@ -184,7 +184,7 @@ class RegressionStudent:
             loss.backward()
             opt.step()
             sched.step()
-            losses.append(float(loss))
+            losses.append(loss.item())
         self.model.eval()
         return TrainingLog(losses, time.perf_counter() - start)
 
