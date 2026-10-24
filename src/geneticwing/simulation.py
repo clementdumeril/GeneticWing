@@ -67,6 +67,27 @@ def aerodynamic_acceleration(
     return (lift + (thrust - drag) * v_hat) / aircraft.mass - aircraft.g * _UP
 
 
+def rk4_step(accel, p, v, t: float, dt: float):
+    """One classical Runge-Kutta step of ``p' = v, v' = accel(p, v, t)``.
+
+    Returns the new position and velocity, and the acceleration at the start of
+    the step (the one a scorer should pair with ``(p, v)``). Explicit Euler is
+    not good enough here: lift turns the velocity, and every Euler step adds
+    ``(a dt)^2`` to its square, which a search learns to harvest as free
+    energy in tight turns. Works on NumPy arrays and PyTorch tensors alike.
+    """
+    a1 = accel(p, v, t)
+    v2 = v + 0.5 * dt * a1
+    a2 = accel(p + 0.5 * dt * v, v2, t + 0.5 * dt)
+    v3 = v + 0.5 * dt * a2
+    a3 = accel(p + 0.5 * dt * v2, v3, t + 0.5 * dt)
+    v4 = v + dt * a3
+    a4 = accel(p + dt * v3, v4, t + dt)
+    p_new = p + dt / 6.0 * (v + 2.0 * v2 + 2.0 * v3 + v4)
+    v_new = v + dt / 6.0 * (a1 + 2.0 * a2 + 2.0 * a3 + a4)
+    return p_new, v_new, a1
+
+
 def simulate_tracking(
     aircraft: Aircraft,
     reference: FlatState,
@@ -79,7 +100,7 @@ def simulate_tracking(
 ) -> FlatState:
     """Fly ``reference`` (a densely sampled plan) until its end point is passed.
 
-    Integration is semi-implicit Euler at ``1 / dt`` Hz.
+    Commands are updated at ``1 / dt`` Hz and held over each RK4 step.
     """
     max_duration = 2.0 * float(reference.t[-1]) if max_duration is None else max_duration
     steps = int(round(max_duration / dt))
@@ -120,13 +141,15 @@ def simulate_tracking(
         bank += np.clip(bank_step, -bank_rate_max * dt, bank_rate_max * dt)
         thrust = np.clip(float(c.thrust_required), 0.0, aircraft.max_thrust) if config.powered else 0.0
 
-        acc[k] = aerodynamic_acceleration(aircraft, v[k] - w, cl, bank, thrust)
+        def accel(pos, vel, time, cl=cl, bank=bank, thrust=thrust):
+            return aerodynamic_acceleration(aircraft, vel - wind(pos, time), cl, bank, thrust)
+
+        p_next, v_next, acc[k] = rk4_step(accel, p[k], v[k], t, dt)
 
         passed_end = idx == last and (p[k] - reference.position[last]) @ end_tangent >= 0.0
         if passed_end or k == steps:
             break
-        v[k + 1] = v[k] + acc[k] * dt
-        p[k + 1] = p[k] + v[k + 1] * dt
+        p[k + 1], v[k + 1] = p_next, v_next
 
     n = k + 1
     t = np.arange(n) * dt

@@ -157,6 +157,42 @@ def heading_frame_context(scenario: SoaringScenario) -> np.ndarray:
     return (raw - _HEADING_CENTER) / _HEADING_SCALE
 
 
+def heading_context_raw(context: np.ndarray) -> np.ndarray:
+    """Normalized heading-frame context -> physical units (m, m/s)."""
+    return np.asarray(context) * _HEADING_SCALE + _HEADING_CENTER
+
+
+def canonical_scenario(context: np.ndarray) -> SoaringScenario:
+    """The S1-family situation seen from the aircraft: start at the origin, nose along +x.
+
+    Built from the normalized heading-frame context alone. Energy and
+    constraints are invariant to this rotation, so scores match the original
+    scenario's.
+    """
+    ahead, left, z, w_star, wind_ahead, wind_left = heading_context_raw(context)
+    return SoaringScenario(
+        name="S1 family (canonical frame)",
+        aircraft=SBXC_APPROX,
+        wind=UniformWind((wind_ahead, wind_left, 0.0))
+        + Thermal(center=(ahead, left), w_star=w_star, drift=(wind_ahead, wind_left)),
+        start=(0.0, 0.0, z),
+        heading_deg=90.0,  # compass east = +x
+        airspeed=CRUISE_AIRSPEED,
+        horizon=60.0,
+        mission=LoiterMission(center=(ahead, left), radius=300.0),
+        thrust_max=MOTOR_THRUST,
+        n_control=32,
+    )
+
+
+def to_canonical(points: np.ndarray, scenario: SoaringScenario) -> np.ndarray:
+    """World positions ``(..., 3)`` of a scenario -> its canonical frame."""
+    h = np.radians(scenario.heading_deg)
+    ahead, left = np.array([np.sin(h), np.cos(h)]), np.array([-np.cos(h), np.sin(h)])
+    rel = np.asarray(points)[..., :2] - np.asarray(scenario.start[:2])
+    return np.stack([rel @ ahead, rel @ left, np.asarray(points)[..., 2]], axis=-1)
+
+
 def mirror(contexts: np.ndarray, genomes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Left/right mirror image: lateral context terms and turn-rate genes change sign.
 

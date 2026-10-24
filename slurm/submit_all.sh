@@ -5,6 +5,7 @@
 #   bash slurm/submit_all.sh            # everything
 #   bash slurm/submit_all.sh train      # only the students (dataset already merged)
 #   bash slurm/submit_all.sh latent     # only the latent GA (dataset already merged)
+#   bash slurm/submit_all.sh physics    # only the latent GA with the physics decoder
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source slurm/config.sh
@@ -32,6 +33,11 @@ submit() {  # sbatch wrapper that prints and returns the job id
 }
 
 n_sizes=${#TRAIN_SIZES[@]}
+if [ "${1:-all}" = "physics" ]; then
+    physics=$(submit "${cpu[@]}" --time="$TIME_PHYSICS" --output="$logs/%x-%j.out" slurm/physics.sbatch)
+    echo "physics decoder: job $physics (results in ${WORK}/phase3/physics)"
+    exit 0
+fi
 if [ "${1:-all}" = "latent" ]; then
     latent=$(submit "${cpu[@]}" --time="$TIME_LATENT" --output="$logs/%x-%j.out" slurm/latent.sbatch)
     echo "latent GA: job $latent (results in ${WORK}/phase3/latent)"
