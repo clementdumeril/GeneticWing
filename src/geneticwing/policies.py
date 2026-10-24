@@ -34,7 +34,7 @@ import numpy as np
 
 from geneticwing.evolution import ZohdiGA
 from geneticwing.flatness import flat_state
-from geneticwing.simulation import aerodynamic_acceleration
+from geneticwing.simulation import aerodynamic_acceleration, rk4_step
 from geneticwing.soaring import Evaluation, GoalMission, SoaringProblem
 from geneticwing.wind.base import CompositeWind
 from geneticwing.wind.ridge import RidgeLift
@@ -170,7 +170,10 @@ def simulate_law(problem: SoaringProblem, theta: np.ndarray, settings: LawSettin
         cl += alpha * (np.clip(c.cl, 0.0, cl_limit) - cl)
         bank += np.clip(alpha * (np.clip(c.bank, -bank_max, bank_max) - bank), -bank_rate, bank_rate)
         thrust = np.where(below, np.clip(c.thrust_required, 0.0, sc.thrust_max), 0.0)
-        a = aerodynamic_acceleration(ac, v_air, cl, bank, thrust)
+        def accel(pos, vel, time, cl=cl, bank=bank, thrust=thrust):
+            return aerodynamic_acceleration(ac, vel - sc.wind(pos, time), cl, bank, thrust)
+
+        p_next, v_next, a = rk4_step(accel, p, v, t, dt)
         # Agents that hit the ground or overspeed stop where they are; their scores are infeasible.
         crashed |= (p[:, 2] < 0.0) | (airspeed > 3.0 * sc.airspeed_max)
         a[crashed] = 0.0
@@ -180,8 +183,8 @@ def simulate_law(problem: SoaringProblem, theta: np.ndarray, settings: LawSettin
             record["p"].append(p.copy())
             record["v"].append(v.copy())
             record["a"].append(a)
-        v = v + a * dt
-        p = p + v * dt
+        p = np.where(crashed[:, None], p, p_next)
+        v = np.where(crashed[:, None], 0.0, v_next)
 
     P, V, A = (np.stack(record[key], axis=1) for key in ("p", "v", "a"))
     t = np.broadcast_to(problem.t, P.shape[:-1])

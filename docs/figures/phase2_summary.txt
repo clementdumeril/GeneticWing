@@ -1,45 +1,45 @@
 
 S1  (cost: 1 = level cruise on the motor, < 0 = net energy gain)
 method           mean cost    best  feasible  alt gain (m)  E_prop (Wh)  time (s)
-NLP                  -2.77   -5.00      3/3          82.0        0.765      23.6
-NLP-multi             0.96    0.96      2/3          91.5        1.707      23.3
-GA                    0.15    0.01      3/3          44.5        1.160      24.1
-ZohdiGA                nan     nan      0/3           7.2        1.587      22.6
-CMA-ES               -0.32   -0.87      3/3          55.6        1.240      25.3
-CMA-ES+NLP           -3.80   -4.82      3/3         119.0        1.213      25.8
-GA@100k              -0.99   -1.41      3/3          93.0        1.748     113.8
-CMA-ES@100k          -2.14   -3.34      3/3          77.6        0.961     110.2
-Law+NLP              -6.08   -6.57      3/3         122.8        0.345      23.2
-Law+CMA-ES+NLP       -4.44   -4.91      3/3         126.5        1.126      24.4
-Law                  -4.67   -5.40      3/3          83.0        0.000      38.9
-teacher (best per instance): {0: 'Law+NLP (-6.57)', 1: 'Law+NLP (-5.48)', 2: 'Law+NLP (-6.21)'}
+NLP                  -2.77   -5.00      3/3          82.0        0.765      14.3
+NLP-multi             0.96    0.96      2/3          91.5        1.707      15.6
+GA                    0.15    0.01      3/3          44.5        1.160      15.0
+ZohdiGA                nan     nan      0/3           7.2        1.587      13.9
+CMA-ES               -0.32   -0.87      3/3          55.6        1.240      15.6
+CMA-ES+NLP           -3.80   -4.82      3/3         119.0        1.213      16.3
+GA@100k              -0.99   -1.41      3/3          93.0        1.748      73.4
+CMA-ES@100k          -2.14   -3.34      3/3          77.6        0.961      78.1
+Law+NLP              -6.04   -6.53      3/3         123.3        0.372      14.3
+Law+CMA-ES+NLP       -3.86   -4.46      3/3         120.0        1.229      16.0
+Law                  -4.58   -5.03      3/3          81.2        0.000      92.8
+teacher (best per instance): {0: 'Law+NLP (-6.53)', 1: 'Law+NLP (-5.43)', 2: 'Law+NLP (-6.17)'}
 
 S2  (cost: 1 = level cruise on the motor, < 0 = net energy gain)
 method           mean cost    best  feasible  alt gain (m)  E_prop (Wh)  time (s)
-NLP                    nan     nan      0/3         218.5        4.644      37.3
-NLP-multi              nan     nan      0/3         129.1        2.992      34.5
-GA                     nan     nan      0/3          40.4        3.825      33.2
-ZohdiGA                nan     nan      0/3          -6.2        3.010      30.4
-CMA-ES                 nan     nan      0/3          -7.6        3.265      40.3
-CMA-ES+NLP             nan     nan      0/3         151.5        3.629      33.7
-GA@100k               0.47    0.28      3/3         172.3        4.496     130.7
-CMA-ES@100k           0.78    0.60      3/3         101.0        3.209     164.0
-Law+NLP                nan     nan      0/3         220.6        2.950      34.4
-Law+CMA-ES+NLP         nan     nan      0/3          93.7        3.271      34.5
-Law                  -0.15   -0.19      3/3           3.5        0.000      46.1
-teacher (best per instance): {0: 'Law (-0.19)', 1: 'Law (-0.13)', 2: 'Law (-0.13)'}
+NLP                    nan     nan      0/3         218.5        4.644      21.2
+NLP-multi              nan     nan      0/3         129.1        2.992      21.7
+GA                     nan     nan      0/3          40.4        3.825      19.4
+ZohdiGA                nan     nan      0/3          -6.2        3.010      18.3
+CMA-ES                 nan     nan      0/3          -7.6        3.265      23.1
+CMA-ES+NLP             nan     nan      0/3         151.5        3.629      22.5
+GA@100k               0.47    0.28      3/3         172.3        4.496     102.6
+CMA-ES@100k           0.78    0.60      3/3         101.0        3.209     118.8
+Law+NLP                nan     nan      0/3         212.4        2.804      22.3
+Law+CMA-ES+NLP         nan     nan      0/3           4.4        3.727      23.4
+Law                  -0.02   -0.04      3/3          -2.0        0.000     115.4
+teacher (best per instance): {0: 'Law (-0.04)', 1: 'Law (-0.01)', 2: 'Law (0.00)'}
 
 S3  (cost: 1 = level cruise on the motor, < 0 = net energy gain)
 method           mean cost    best  feasible  alt gain (m)  E_prop (Wh)  time (s)
-NLP                  -2.11   -2.11      1/3           5.3        0.668      10.4
-NLP-multi            -2.35   -2.35      1/3          11.8        0.220      24.0
-GA                   -0.73   -1.47      3/3          26.2        0.420      22.0
-ZohdiGA                nan     nan      0/3           7.1        1.624      21.1
-CMA-ES               -1.92   -2.13      3/3          42.8        0.194      23.3
-CMA-ES+NLP           -2.16   -2.37      3/3          40.3        0.026      23.1
-GA@100k              -1.83   -2.06      3/3          36.2        0.088     115.2
-CMA-ES@100k          -2.10   -2.33      3/3          41.0        0.073     119.5
-Law+NLP               0.89    0.69      3/3         -13.5        0.082      17.1
-Law+CMA-ES+NLP       -2.05   -2.38      3/3          38.0        0.019      21.9
-Law                  -1.98   -2.24      3/3          35.3        0.000      36.9
-teacher (best per instance): {0: 'Law+CMA-ES+NLP (-2.38)', 1: 'CMA-ES+NLP (-1.79)', 2: 'CMA-ES+NLP (-2.32)'}
+NLP                  -2.11   -2.11      1/3           5.3        0.668       6.7
+NLP-multi            -2.35   -2.35      1/3          11.8        0.220      16.1
+GA                   -0.73   -1.47      3/3          26.2        0.420      14.1
+ZohdiGA                nan     nan      0/3           7.1        1.624      13.8
+CMA-ES               -1.92   -2.13      3/3          42.8        0.194      15.3
+CMA-ES+NLP           -2.16   -2.37      3/3          40.3        0.026      15.7
+GA@100k              -1.83   -2.06      3/3          36.2        0.088      69.1
+CMA-ES@100k          -2.10   -2.33      3/3          41.0        0.073      74.5
+Law+NLP              -0.03   -2.06      3/3           4.3        0.085      12.7
+Law+CMA-ES+NLP       -2.03   -2.37      3/3          37.7        0.026      15.4
+Law                  -1.96   -2.22      3/3          35.0        0.000      81.3
+teacher (best per instance): {0: 'Law+CMA-ES+NLP (-2.37)', 1: 'CMA-ES+NLP (-1.79)', 2: 'Law+CMA-ES+NLP (-2.32)'}

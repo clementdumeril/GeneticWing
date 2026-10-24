@@ -57,3 +57,8 @@ LATENT_STEPS=20000
 LATENT_ROUNDS=3                  # improvement-loop rounds
 LOOP_SOLUTIONS=2000              # teacher labels revisited per round
 TIME_LATENT="03:00:00"
+
+# --- Physics decoder (bash slurm/submit_all.sh physics) -----------------------
+PHYSICS_DIMS=(8 16 32)
+PHYSICS_MARGINS=1                # 1: commands bounded by the teacher's margins (fair comparison)
+TIME_PHYSICS="04:00:00"
