@@ -85,3 +85,22 @@ def test_reactive_law_flies_and_is_scored(s1):
     ev = simulate_law(s1, theta)
     assert ev.cost.shape == (6,) and np.all(np.isfinite(ev.cost))
     np.testing.assert_allclose(ev.state.position[:, 0], np.tile(s1.scenario.start, (6, 1)))
+
+
+def test_turn_radius_limit_matches_the_coordinated_turn_radius():
+    from dataclasses import replace
+
+    from geneticwing.flatness import flat_state
+
+    speed, radius, n = 10.0, 25.0, 40
+    omega = speed / radius
+    t = np.linspace(0, 2 * np.pi / omega, n)
+    p = np.stack([radius * np.cos(omega * t), radius * np.sin(omega * t), np.full(n, 200.0)], axis=-1)
+    v = speed * np.stack([-np.sin(omega * t), np.cos(omega * t), np.zeros(n)], axis=-1)
+    a = -omega**2 * (p - [0.0, 0.0, 200.0])
+    base = SCENARIOS["S1"](0)
+    s = flat_state(base.aircraft, t, p[None], v[None], a[None], np.zeros((1, n, 3)))
+    loose = SoaringProblem(replace(base, turn_radius_min=0.9 * radius)).hinges(s)["turn_radius"]
+    tight = SoaringProblem(replace(base, turn_radius_min=1.1 * radius)).hinges(s)["turn_radius"]
+    assert np.all(loose < 0) and np.all(tight > 0)
+    assert np.all(SoaringProblem(base).hinges(s)["turn_radius"] < 0)  # no limit by default

@@ -90,9 +90,12 @@ counting feasible solutions only.
 | CMA-ES + NLP | -3.80 | infeasible | **-2.16** |
 | GA @100k | -0.99 | 0.47 | -1.83 |
 | CMA-ES @100k | -2.14 | 0.78 | -2.10 |
-| Reactive law (Zohdi-tuned) | -4.67 | **-0.15** | -1.98 |
-| **Law + NLP** (seeded) | **-6.08** | infeasible | 0.89 |
-| Law + CMA-ES + NLP (seeded) | -4.44 | infeasible | -2.05 |
+| Reactive law (Zohdi-tuned) | -4.58 | **-0.02** | -1.96 |
+| **Law + NLP** (seeded) | **-6.04** | infeasible | -0.03 |
+| Law + CMA-ES + NLP (seeded) | -3.86 | infeasible | -2.03 |
+
+The law rows are simulated with RK4 (see the integration note below); the
+other rows come from the exact flat evaluation.
 
 ![Trajectories](docs/figures/phase2_trajectories.png)
 ![Convergence](docs/figures/phase2_convergence.png)
@@ -106,10 +109,11 @@ What this says about H1:
 - **Structure beats search.** The reactive law, tuned offline Zohdi-style,
   encodes the orbit the planners must otherwise discover. Fitting a genome to
   its flight and refining it with the NLP gives the best results on S1
-  (-6.08, every instance), 30 % more energy than the law alone.
+  (-6.04, every instance), 30 % more energy than the law alone.
 - **S2 stays out of reach of the planners at 20k**: the law is the only method
-  that soars there without the motor. The fixed 150 s horizon with a terminal
-  goal over 159 genes is the likely culprit; receding horizon is the fix.
+  that reaches the goal without spending energy, and only just (-0.02). The
+  fixed 150 s horizon with a terminal goal over 159 genes is the likely
+  culprit; receding horizon is the fix.
 - On S3 the law's flight is fitted less accurately (20 m), and the NLP from it
   ends in a poor optimum; CMA-ES + NLP remains the best there.
 - **The teacher is a portfolio** (law + NLP, the law, CMA-ES + NLP), as planned
@@ -141,7 +145,7 @@ Evaluation on 78 held-out instances (teacher mean cost -5.19):
 | Flow matching, 64 samples, 8 steps | 67 % | 15 % | -2.06 | 3.11 | 49 ms |
 | Flow matching + learned mutations | 74 % | 16 % | -1.95 | 3.31 | 137 ms |
 | Flow matching + mutations + NLP (2000 evals) | 76 % | 75 % | -2.51 | 2.72 | 1.0 s |
-| Reactive law | 100 % | 100 % | -3.69 | 1.50 | feedback law |
+| Reactive law (RK4) | 100 % | 100 % | -3.53 | 1.66 | feedback law |
 | NLP from straight flight (2000 evals) | 8 % | 8 % | 1.49 | 6.95 | 0.9 s |
 
 ![Student](docs/figures/phase3_student.png)
@@ -171,10 +175,115 @@ Caveats: about 1.3k teacher solutions for 87 genes is little data; CPU
 training; point-mass model; the law's time is a simulation cost, as a feedback
 law it runs in microseconds.
 
-Next steps: 10x more teacher data on the cluster, a transformer over control
-points (as in DynFly) or latent flow matching, constraint-aware training,
-DAgger and the self-improvement loop (H6), and the closed-loop evaluation of
-phase 4.
+## Phase 3 at scale (Savio) and the GA in a learned space
+
+On Savio (see below), the teacher solved 15,080 situations (27,649 solutions).
+All numbers here are on the same 77 held-out situations; the teacher averages
+-5.24 there.
+
+| Module | Content |
+| --- | --- |
+| `geneticwing.latent` | Conditional VAE over genomes, latent GA (`latent_search`) |
+| `geneticwing.torchsim` | Batched point-mass simulator, PyTorch (differentiable) and NumPy, RK4, commands bounded by construction |
+| `geneticwing.physvae` | Command VAE: teacher commands read off by the flat map, decoded and flown; latent GA over it |
+| `geneticwing.benchmarks.canonical_scenario` | A situation in the aircraft's frame, built from its 6-number context |
+| `scenarios/phase3_latent.py`, `phase3_physics.py` | The two latent-GA studies (round trip, prior samples, latent GA, improvement loop) |
+| `scenarios/phase3_realism.py` | The same minimum turn radius for the teacher and the latent GA |
+| `scenarios/report_figures.py` | The figures below, from the folder copied back from Savio |
+
+### The student's scaling curve (H2)
+
+![Scaling](docs/figures/savio_scaling.png)
+
+More data helps up to about 3,000 situations, then the gap plateaus (one run
+per size; 10k versus all is within noise). Beyond that point the limit is the
+model, not the data. H3 holds at every size: regression solves at most 12 %.
+
+### Genetic search in a learned latent space (H1 reformulated)
+
+The phase 2 GA failed on 87 coupled genes. Here a conditional VAE compresses
+the teacher's trajectories into a few latent dimensions, and the same GA
+(population 50, 3,000 evaluations) searches that space; each individual is
+decoded and checked (latent variable evolution: Volz et al. 2018; data-driven
+encodings: Gaier, Asteroth and Mouret 2020).
+
+| Method (77 situations) | Solved | Mean cost | Gap |
+| --- | --- | --- | --- |
+| GA on the 87 genes + NLP | 55 % | +1.92 | 7.09 |
+| Latent GA + NLP, 8 / 16 / 32 latent dimensions | 100 % | -3.32 / **-3.59** / -3.42 | 1.92 / 1.64 / 1.81 |
+| Same, d = 16, after one improvement round | 100 % | -3.73 | 1.51 |
+
+The latent space rescues the GA (55 % to 100 % solved). The improvement loop
+(the latent GA revisits 2,000 teacher solutions per round, about 15 % of them
+improve slightly, the VAE is retrained) brings little after one round: H6 is
+not supported here. The bottleneck is the decoder: the teacher's own
+trajectory survives the encode-decode round trip in only about 20 % of cases,
+because small position errors become large C_L and thrust errors.
+
+### Physics decoder
+
+The decoder now outputs **commands** (C_L, bank, thrust at 61 knots), squashed
+into their limits, and a point-mass simulator (`geneticwing.torchsim`, with a
+load limiter) turns them into the trajectory: C_L, bank, thrust and load
+factor cannot be violated. The VAE learns the teacher's commands, read off its
+trajectories by the flat map (`geneticwing.physvae`). Commands are bounded by
+the teacher's own margins, so every method faces the same feasible set.
+
+| Method (77 situations) | Solved | Mean cost | Gap | Time per plan |
+| --- | --- | --- | --- | --- |
+| Teacher's commands flown open loop | 100 % | -4.70 | 0.54 | 0.14 s |
+| Teacher round trip (encode, decode, fly) | 100 % | -4.64 | 0.59 | 0.14 s |
+| **64 prior samples of the physics VAE**, best kept (d = 8) | 100 % | **-5.21** | **0.03** | **0.2 s** |
+| **Latent GA, physics VAE** (d = 16) | 100 % | **-6.06** | **-0.82** | 12.6 s |
+| Latent GA, physics VAE, + NLP (d = 16) | 100 % | -6.02 | -0.78 | 14.2 s |
+
+![Methods](docs/figures/savio_methods.png)
+
+- The round trip goes from 20 % to 100 % feasible, and every method using
+  this decoder jumps from about -3.6 to between -5 and -6.
+- **The latent GA beats the teacher** by 0.82 energy units on average, with
+  the same margins. It does so by circling tighter (median radius 15 to 25 m
+  instead of 21 to 29 m), which the genome's turn-rate bound (30 deg/s) did not
+  allow the teacher.
+- **64 random samples of the physics VAE match the teacher in 0.2 s** with no
+  search: a candidate for real-time planning.
+- **The gain depends on how tight a real sailplane can turn** (realism test
+  below).
+
+### Realism test: one minimum turn radius for every method
+
+`scenarios/phase3_realism.py` re-solves the teacher and runs the physics
+latent GA under the same limit on the coordinated-turn radius
+`V^2 / (g tan|bank|)` (77 situations, teacher margins for both).
+
+| Minimum radius | Teacher | Physics latent GA | Gap (GA - teacher) | 64 prior samples (solved) |
+| --- | --- | --- | --- | --- |
+| none | -5.22 | -6.06 | **-0.85** | -5.10 (100 %) |
+| 12 m | -5.22 | -5.86 | **-0.64** | -5.03 (100 %) |
+| 15 m (about 3 spans) | -5.23 | -5.56 | **-0.35** | -4.20 (97 %) |
+| 18 m | -5.09 | -4.42 | +0.67 | -1.86 (65 %) |
+
+The teacher hardly changes: its genome already avoided tight turns. Most of
+the latent GA's gain comes from turning tighter; it survives at 12 to 15 m
+(plausible for this airframe) and reverses at 18 m, where the command space
+learned from the teacher covers wide circles poorly. The real turn limit is
+the open question: a span-resolved (strip) wing model is the next step.
+
+### Integration note (RK4)
+
+The first simulators used explicit Euler steps. Lift turns the velocity, and
+every Euler step adds `(a dt)^2` to its square: free energy in turns, which a
+search on the physics decoder harvested (costs three times better than the
+teacher). All simulators now use RK4 (`geneticwing.simulation.rk4_step`); a
+steady glide turn loses exactly the polar's sink, even with 0.4 s steps.
+Earlier results affected: the reactive law's online cost was about 4 % too
+optimistic (on the 77 Savio situations: -3.73 with Euler, -3.57 with RK4).
+Costs of the teacher, planners, students and position VAE come from the
+exact flat evaluation and are unchanged.
+
+Next steps: a strip (span-resolved) wing model to settle the real turn
+limit, retraining the command VAE under that limit, then phase 4:
+closed-loop flight with turbulence and wind-estimation errors (H5).
 
 ## Usage
 
@@ -185,6 +294,9 @@ python scenarios/s0_glide.py --out results
 python scenarios/phase2_teacher.py --out results/phase2 --workers 8
 python scenarios/phase3_dataset.py --train 600 --test 80
 python scenarios/phase3_student.py --steps 20000
+python scenarios/phase3_latent.py --data results/phase3/dataset.npz
+python scenarios/phase3_physics.py --data results/phase3/dataset.npz --margins
+python scenarios/report_figures.py --src results/savio_phase3
 ```
 
 ## Running phase 3 at scale on Savio (Berkeley)
@@ -212,6 +324,8 @@ Then:
 bash slurm/submit_all.sh       # law -> shards -> merge -> students
 squeue -u $USER
 bash slurm/submit_all.sh train # later: retrain only, on the merged dataset
+bash slurm/submit_all.sh latent    # latent GA (position VAE)
+bash slurm/submit_all.sh physics   # latent GA with the physics decoder
 ```
 
 Results land in `/global/scratch/users/$USER/geneticwing/phase3/students/n_<size>/`

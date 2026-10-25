@@ -7,10 +7,10 @@ export PYTHONUNBUFFERED=1
 DATA="${WORK}/phase3"
 mkdir -p "$DATA/shards" "$DATA/logs"
 
-# On Savio the batch script itself stays pinned to one core even when the job
-# holds more: only a job step started by srun sees them all. So every program
-# runs through `run`, and CORES comes from what SLURM granted, not from nproc.
-CORES=${SLURM_CPUS_PER_TASK:-$(nproc)}
+# Worker counts come from what SLURM granted. Not from `nproc`: GNU nproc
+# returns OMP_NUM_THREADS when it is set, so with the line above it says 1 --
+# the cause of the first runs using one core out of 32 or 40.
+CORES=${SLURM_CPUS_PER_TASK:-$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc)}
 run() {
     if [ -n "${SLURM_JOB_ID:-}" ]; then
         srun --ntasks=1 --cpus-per-task="$CORES" --cpu-bind=none "$@"
@@ -18,4 +18,5 @@ run() {
         "$@"
     fi
 }
-echo "job ${SLURM_JOB_ID:-local} on $(hostname), $CORES cores granted, $(run nproc) visible to programs, $(date)"
+visible=$(run env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc)
+echo "job ${SLURM_JOB_ID:-local} on $(hostname), $CORES cores granted, $visible usable, $(date)"
