@@ -89,6 +89,7 @@ class SoaringScenario:
     cl_margin: float = 0.9
     bank_max_deg: float = 45.0
     load_max: float = 2.5
+    turn_radius_min: float | None = None  # m, coordinated-turn radius V_a^2 / (g tan|bank|); None = no limit
     brake_capacity: float = 0.05  # fraction of weight the airframe can shed (spoilers, slips)
     efficiency: float = 0.5  # propulsive efficiency
     ks_sharpness: float = 200.0  # KS aggregation of time-series constraints (conservative by log(N) / rho)
@@ -123,6 +124,7 @@ class SoaringProblem:
         "airspeed_max",
         "bank",
         "load",
+        "turn_radius",
         "altitude",
         "terrain",
         "mission",
@@ -210,6 +212,11 @@ class SoaringProblem:
             h["terrain"] = (sc.clearance_min - sc.clearance(p)) / 50.0
         else:
             h["terrain"] = np.full(p.shape[:-1], -1.0)
+        if sc.turn_radius_min is not None:
+            # R = V^2 / (g tan|bank|) >= R_min  <=>  g tan|bank| <= V^2 / R_min
+            h["turn_radius"] = (ac.g * np.tan(np.abs(s.bank)) - s.airspeed**2 / sc.turn_radius_min) / ac.g
+        else:
+            h["turn_radius"] = np.full(p.shape[:-1], -1.0)
         m = sc.mission
         if isinstance(m, LoiterMission):
             r = np.linalg.norm(p[..., :2] - np.asarray(m.center), axis=-1)
