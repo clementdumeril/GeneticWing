@@ -42,7 +42,7 @@ The setup is a 400 m leg from 120 m, with a 12.5 m/s airspeed reference and a
 | Glide ratio | 9.83 | 11.15 | 11.27 |
 | Airspeed RMSE (m/s) | 1.09 | 0.00 | 0.87 |
 | Sink-rate RMSE (m/s) | 0.39 | 0.00 | 0.43 |
-| Netto RMSE (m/s) | 0.69 | 0.00 | 0.72 |
+| Netto RMSE (m/s) | 0.69 | 0.00 | 0.71 |
 
 The planner converges from 20 out of 20 perturbed initial guesses.
 
@@ -148,6 +148,8 @@ Evaluation on 78 held-out instances (teacher mean cost -5.19):
 | Reactive law (RK4) | 100 % | 100 % | -3.53 | 1.66 | feedback law |
 | NLP from straight flight (2000 evals) | 8 % | 8 % | 1.49 | 6.95 | 0.9 s |
 
+The reactive-law row was rerun with RK4; `docs/figures/phase3_summary.txt` still holds the earlier Euler value (-3.69, gap 1.50).
+
 ![Student](docs/figures/phase3_student.png)
 
 What this says:
@@ -158,7 +160,8 @@ What this says:
   the thermal, in both directions.
 - **H2 holds only in part.** The student plans in 30 to 50 ms on a laptop CPU
   and finds a feasible soaring trajectory for 67 to 90 % of new instances, but
-  keeps only about 40 % of the teacher's energy gain, and does not yet beat the
+  keeps only about 40 % of the teacher's energy gain (8-step sampler; the 1-step
+  sampler keeps none), and does not yet beat the
   reactive law it was partly distilled from.
 - **H4 holds in part.** The NLP warm-started by the student solves 76 % of the
   instances, against 8 % for the same NLP from straight flight, and narrows
@@ -334,3 +337,7 @@ all in `slurm/config.sh`.
 
 Conventions: ENU frame (z up), SI units, wind is the air-mass velocity.
 Arrays are `(..., N, 3)` so populations evaluate in one call.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
