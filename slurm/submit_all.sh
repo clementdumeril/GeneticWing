@@ -21,6 +21,7 @@ if [[ "$ACCOUNT" == *CHANGEME* ]]; then
 fi
 
 cpu=(--account="$ACCOUNT" --partition="$CPU_PARTITION" --qos="$CPU_QOS" --cpus-per-task="$CPU_CORES")
+serial=(--account="$ACCOUNT" --partition="$SERIAL_PARTITION" --qos="$SERIAL_QOS" --cpus-per-task="$SERIAL_CORES")
 gpu=(--account="$ACCOUNT" --partition="$GPU_PARTITION" --qos="$GPU_QOS" --gres="$GPU_GRES" --cpus-per-task="$GPU_CPUS")
 if [ "$TRAIN_ON" = "cpu" ]; then
     train_res=("${cpu[@]}")
@@ -56,12 +57,12 @@ if [ "${1:-all}" = "train" ]; then
     exit 0
 fi
 
-law=$(submit "${cpu[@]}" --time="$TIME_LAW" --output="$logs/%x-%j.out" slurm/teacher_law.sbatch)
+law=$(submit "${serial[@]}" --time="$TIME_LAW" --output="$logs/%x-%j.out" slurm/teacher_law.sbatch)
 echo "law:      job $law"
 shards=$(submit "${cpu[@]}" --time="$TIME_SHARD" --array=0-"$N_SHARDS" \
     --dependency=afterok:"$law" --output="$logs/%x-%A_%a.out" slurm/teacher_shards.sbatch)
 echo "teacher:  job $shards (array 0-$N_SHARDS, the last task is the test set)"
-merge=$(submit "${cpu[@]}" --time="$TIME_MERGE" --dependency=afterok:"$shards" \
+merge=$(submit "${serial[@]}" --time="$TIME_MERGE" --dependency=afterok:"$shards" \
     --output="$logs/%x-%j.out" slurm/merge.sbatch)
 echo "merge:    job $merge"
 if [ "${1:-all}" = "strip" ]; then
