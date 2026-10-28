@@ -11,6 +11,11 @@ CPU_PARTITION="savio3"
 CPU_QOS="savio_normal"
 CPU_CORES=32                     # cores per savio3 node (check_savio.sh, CPUS column)
 
+# Serial jobs (law tuning, merge) on a partition billed per core, not per node.
+SERIAL_PARTITION="savio3_htc"
+SERIAL_QOS="savio_normal"
+SERIAL_CORES=1
+
 # GPU nodes, for the students. The QoS and the GPU type go together on Savio:
 # take a matching pair from check_savio.sh (examples: A40 / a40_gpu3_normal,
 # GTX2080TI / gtx2080_gpu3_normal). CPUs per GPU are fixed per GPU type.
@@ -51,7 +56,7 @@ TRAIN_STEPS=40000
 
 # Walltimes (hh:mm:ss). A laptop core solves one instance in about 18 s;
 # 750 instances on a 32-core node take about 8 minutes, so these are generous.
-TIME_LAW="00:30:00"
+TIME_LAW="02:00:00"              # serial: about 6 min on a laptop core, 4-5 times longer on Savio
 TIME_SHARD="02:00:00"
 TIME_MERGE="00:20:00"
 TIME_TRAIN="04:00:00"
