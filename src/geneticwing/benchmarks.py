@@ -162,7 +162,7 @@ def heading_context_raw(context: np.ndarray) -> np.ndarray:
     return np.asarray(context) * _HEADING_SCALE + _HEADING_CENTER
 
 
-def canonical_scenario(context: np.ndarray, turn_radius_min: float | None = None) -> SoaringScenario:
+def canonical_scenario(context: np.ndarray, **overrides) -> SoaringScenario:
     """The S1-family situation seen from the aircraft: start at the origin, nose along +x.
 
     Built from the normalized heading-frame context alone. Energy and
@@ -170,7 +170,7 @@ def canonical_scenario(context: np.ndarray, turn_radius_min: float | None = None
     scenario's.
     """
     ahead, left, z, w_star, wind_ahead, wind_left = heading_context_raw(context)
-    return SoaringScenario(
+    scenario = SoaringScenario(
         name="S1 family (canonical frame)",
         aircraft=SBXC_APPROX,
         wind=UniformWind((wind_ahead, wind_left, 0.0))
@@ -182,8 +182,8 @@ def canonical_scenario(context: np.ndarray, turn_radius_min: float | None = None
         mission=LoiterMission(center=(ahead, left), radius=300.0),
         thrust_max=MOTOR_THRUST,
         n_control=32,
-        turn_radius_min=turn_radius_min,
     )
+    return replace(scenario, **overrides) if overrides else scenario
 
 
 def to_canonical(points: np.ndarray, scenario: SoaringScenario) -> np.ndarray:

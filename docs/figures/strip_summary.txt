@@ -1,0 +1,4 @@
+ R_min | method              solved  mean cost  gap to teacher  median s
+ strip | Teacher               100%      -4.70            0.00      36.2
+ strip | VAE prior x64          66%      -1.23            3.70       0.4
+ strip | Physics latent GA     100%      -4.28            0.42      23.9

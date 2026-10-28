@@ -44,6 +44,7 @@ import numpy as np
 from geneticwing.aircraft import Aircraft
 from geneticwing.flatness import FlatState, flat_state
 from geneticwing.spline import ClampedBSpline
+from geneticwing.strip import StripWing, turn_loads
 from geneticwing.wind.base import WindField
 
 INFEASIBLE_OFFSET = 1e3
@@ -90,6 +91,7 @@ class SoaringScenario:
     bank_max_deg: float = 45.0
     load_max: float = 2.5
     turn_radius_min: float | None = None  # m, coordinated-turn radius V_a^2 / (g tan|bank|); None = no limit
+    strip_wing: StripWing | None = None  # span-resolved turn loads: inner-wing stall, ailerons, aileron drag
     brake_capacity: float = 0.05  # fraction of weight the airframe can shed (spoilers, slips)
     efficiency: float = 0.5  # propulsive efficiency
     ks_sharpness: float = 200.0  # KS aggregation of time-series constraints (conservative by log(N) / rho)
@@ -125,6 +127,8 @@ class SoaringProblem:
         "bank",
         "load",
         "turn_radius",
+        "wing_stall",
+        "aileron",
         "altitude",
         "terrain",
         "mission",
@@ -194,14 +198,23 @@ class SoaringProblem:
         t = np.broadcast_to(self.t, p.shape[:-1])
         return flat_state(self.scenario.aircraft, t, p, v, a, self.scenario.wind(p, t))
 
+    def thrust_and_loads(self, s: FlatState):
+        """Thrust the trajectory needs, including aileron drag when the strip wing is on, and the turn loads."""
+        sc = self.scenario
+        if sc.strip_wing is None:
+            return s.thrust_required, None
+        loads = turn_loads(sc.strip_wing, sc.aircraft, s.airspeed, s.bank, s.cl)
+        return s.thrust_required + loads.extra_drag, loads
+
     def hinges(self, s: FlatState) -> dict[str, np.ndarray]:
         """Normalized constraint functions, ``(P, N)`` each, positive when violated."""
         sc, ac = self.scenario, self.scenario.aircraft
         w = ac.weight
         p = s.position
+        thrust, loads = self.thrust_and_loads(s)
         h = {
-            "thrust_max": (s.thrust_required - sc.thrust_max) / w,
-            "brake": (-s.thrust_required - sc.brake_capacity * w) / w,
+            "thrust_max": (thrust - sc.thrust_max) / w,
+            "brake": (-thrust - sc.brake_capacity * w) / w,
             "cl": (s.cl - sc.cl_margin * ac.cl_max) / ac.cl_max,
             "airspeed_max": (s.airspeed - sc.airspeed_max) / sc.airspeed_max,
             "bank": (np.abs(s.bank) - np.radians(sc.bank_max_deg)) / np.radians(sc.bank_max_deg),
@@ -217,6 +230,12 @@ class SoaringProblem:
             h["turn_radius"] = (ac.g * np.tan(np.abs(s.bank)) - s.airspeed**2 / sc.turn_radius_min) / ac.g
         else:
             h["turn_radius"] = np.full(p.shape[:-1], -1.0)
+        if loads is not None:
+            h["wing_stall"] = (loads.cl_max_local - sc.cl_margin * ac.cl_max) / ac.cl_max
+            h["aileron"] = (np.abs(loads.aileron) - sc.strip_wing.aileron_cl_max) / sc.strip_wing.aileron_cl_max
+        else:
+            h["wing_stall"] = np.full(p.shape[:-1], -1.0)
+            h["aileron"] = np.full(p.shape[:-1], -1.0)
         m = sc.mission
         if isinstance(m, LoiterMission):
             r = np.linalg.norm(p[..., :2] - np.asarray(m.center), axis=-1)
@@ -236,7 +255,8 @@ class SoaringProblem:
         Planned trajectories and simulated flights are scored by the same code.
         """
         sc, ac = self.scenario, self.scenario.aircraft
-        power = np.maximum(s.thrust_required, 0.0) * s.airspeed / sc.efficiency
+        thrust, _ = self.thrust_and_loads(s)
+        power = np.maximum(thrust, 0.0) * s.airspeed / sc.efficiency
         propulsive = np.trapezoid(power, s.t, axis=-1)
         e_spec = s.position[..., 2] + s.airspeed**2 / (2.0 * ac.g)
         stored = ac.weight * (e_spec[..., -1] - e_spec[..., 0])

@@ -94,14 +94,16 @@ def command_latent_search(
     rng: np.random.Generator,
     seeds_z: np.ndarray | None = None,
     nlp_budget: int = 0,
-    turn_radius_min: float | None = None,
+    **scenario_overrides,
 ):
     """GA over the latent vector of the command VAE; every individual is flown by the simulator.
 
     With ``nlp_budget``, the best flight is fitted to a genome and polished by
-    SLSQP. Returns ``(fitness, cost, feasible)`` of the final trajectory.
+    SLSQP. Extra keyword arguments override fields of the canonical scenario
+    (``turn_radius_min``, ``strip_wing``). Returns ``(fitness, cost, feasible)``
+    of the final trajectory.
     """
-    problem = SoaringProblem(canonical_scenario(context, turn_radius_min))
+    problem = SoaringProblem(canonical_scenario(context, **scenario_overrides))
 
     def objective(x):
         return fly(vae.decode(to_latent(x), context), context, cfg, problem).fitness

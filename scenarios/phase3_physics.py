@@ -31,6 +31,7 @@ from geneticwing.benchmarks import MOTOR_THRUST, canonical_scenario
 from geneticwing.latent import ConditionalVAE
 from geneticwing.physvae import command_latent_search, fly, mirror_commands, teacher_commands
 from geneticwing.soaring import INFEASIBLE_OFFSET, SoaringProblem
+from geneticwing.strip import sbxc_wing
 from geneticwing.torchsim import SimConfig
 
 _VAE: ConditionalVAE | None = None
@@ -62,7 +63,8 @@ def _row(fitness, cost, seconds):
 def evaluate_instance(job):
     instance, context, teacher_units = job
     sim = _sim_config(_CFG)
-    pb = SoaringProblem(canonical_scenario(context))
+    overrides = {"strip_wing": sbxc_wing()} if _CFG.get("strip") else {}
+    pb = SoaringProblem(canonical_scenario(context, **overrides))
     rng = np.random.default_rng(instance)
     out = {}
 
@@ -83,12 +85,13 @@ def evaluate_instance(job):
     out["VAE prior x64"] = _row(ev.fitness[k], ev.cost[k], time.perf_counter() - t0)
 
     t0 = time.perf_counter()
-    f, c, _ = command_latent_search(_VAE, context, sim, _CFG["search_budget"], rng, np.zeros((1, _VAE.latent_dim)))
+    f, c, _ = command_latent_search(_VAE, context, sim, _CFG["search_budget"], rng, np.zeros((1, _VAE.latent_dim)),
+                                    **overrides)
     out["Physics latent GA"] = _row(f, c, time.perf_counter() - t0)
 
     t0 = time.perf_counter()
     f, c, _ = command_latent_search(_VAE, context, sim, _CFG["search_budget"], np.random.default_rng(instance),
-                                    np.zeros((1, _VAE.latent_dim)), nlp_budget=_CFG["nlp_budget"])
+                                    np.zeros((1, _VAE.latent_dim)), nlp_budget=_CFG["nlp_budget"], **overrides)
     out["Physics latent GA + NLP"] = _row(f, c, time.perf_counter() - t0)
     return instance, out
 
@@ -142,6 +145,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=os.cpu_count())
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--strip", action="store_true", help="score every method with the strip-theory wing")
     parser.add_argument("--margins", action="store_true",
                         help="bound the commands by the teacher's margins instead of the nominal limits")
     args = parser.parse_args()
@@ -171,7 +175,7 @@ def main() -> None:
           f"{len(test)} test situations, teacher test cost {np.mean([teacher[i] for i in test]):.2f}", flush=True)
 
     cfg = {"context_dim": contexts.shape[1], "width": args.width, "depth": args.depth, "dt": args.dt,
-           "knots": args.knots, "margins": args.margins,
+           "knots": args.knots, "margins": args.margins, "strip": args.strip,
            "search_budget": args.search_budget, "nlp_budget": args.nlp_budget}
     rows, report = {}, {"args": {k: str(v) for k, v in vars(args).items()}, "results": {}}
     for latent_dim in args.latent_dims:
@@ -181,7 +185,8 @@ def main() -> None:
               f"loss {np.mean(log.losses[-200:]):.2f}", flush=True)
         with ProcessPoolExecutor(max_workers=args.workers, initializer=_init_worker, initargs=(_cpu_state(vae), cfg)) as pool:
             results = dict(pool.map(evaluate_instance, test_jobs, chunksize=1))
-        stage = summarize(results, teacher, f"physics d={latent_dim}{', margins' if args.margins else ''}")
+        tags = (", margins" if args.margins else "") + (", strip" if args.strip else "")
+        stage = summarize(results, teacher, f"physics d={latent_dim}{tags}")
         rows.update(stage)
         report["results"][latent_dim] = stage
         torch.save(vae.state(), args.out / f"command_vae_d{latent_dim}.pt")
