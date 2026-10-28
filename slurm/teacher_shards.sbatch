@@ -20,6 +20,6 @@ else
     name=test
 fi
 
-run python scenarios/phase3_dataset.py --theta "$DATA/theta.npy" \
+run python scenarios/phase3_dataset.py ${strip_flag[@]+"${strip_flag[@]}"} --theta "$DATA/theta.npy" \
     --first "$first" --count "$count" --split "$split" --name "$name" \
     --nlp-budget "$NLP_BUDGET" --workers "$CORES" --out "$DATA/shards"

@@ -30,6 +30,11 @@ PYTHON_MODULE="python/3.11.6-gcc-11.4.0"
 WORK="/global/scratch/users/${USER}/geneticwing"   # venv, data and results live here
 VENV="${WORK}/venv"
 
+# Strip-theory wing (inner-wing stall, ailerons) for the teacher and the physics
+# study, in its own folder. `submit_all.sh strip` sets both; they can be exported too.
+STRIP=${STRIP:-0}
+PHASE3_NAME=${PHASE3_NAME:-phase3}   # data and results folder under $WORK
+
 # --- Experiment size --------------------------------------------------------
 # Training instances are ids TRAIN_FIRST .. TRAIN_FIRST + N_SHARDS * SHARD_SIZE - 1;
 # the test set is ids 600..679, the same as the laptop run.

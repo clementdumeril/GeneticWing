@@ -11,6 +11,6 @@ margins=()
 if [ "${PHYSICS_MARGINS:-0}" = "1" ]; then
     margins=(--margins)  # commands bounded by the teacher's margins: same feasible set as the teacher
 fi
-run python scenarios/phase3_physics.py --data "$DATA/dataset.npz" --out "$DATA/physics" \
+run python scenarios/phase3_physics.py ${strip_flag[@]+"${strip_flag[@]}"} --data "$DATA/dataset.npz" --out "$DATA/physics" \
     --latent-dims ${PHYSICS_DIMS[@]} --steps "$LATENT_STEPS" ${margins[@]+"${margins[@]}"} \
     --workers "$CORES" --threads "$CORES" --device cpu

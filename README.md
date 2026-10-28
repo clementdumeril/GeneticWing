@@ -191,7 +191,8 @@ All numbers here are on the same 77 held-out situations; the teacher averages
 | `geneticwing.physvae` | Command VAE: teacher commands read off by the flat map, decoded and flown; latent GA over it |
 | `geneticwing.benchmarks.canonical_scenario` | A situation in the aircraft's frame, built from its 6-number context |
 | `scenarios/phase3_latent.py`, `phase3_physics.py` | The two latent-GA studies (round trip, prior samples, latent GA, improvement loop) |
-| `scenarios/phase3_realism.py` | The same minimum turn radius for the teacher and the latent GA |
+| `scenarios/phase3_realism.py` | The same turn limit (radius, or `--strip`) for the teacher and the latent GA |
+| `geneticwing.strip` | Strip-theory wing in a turn: inner-wing stall, aileron authority and drag |
 | `scenarios/report_figures.py` | The figures below, from the folder copied back from Savio |
 
 ### The student's scaling curve (H2)
@@ -272,6 +273,38 @@ the latent GA's gain comes from turning tighter; it survives at 12 to 15 m
 learned from the teacher covers wide circles poorly. The real turn limit is
 the open question: a span-resolved (strip) wing model is the next step.
 
+### Strip wing: the real turn limit
+
+`geneticwing.strip` cuts the 4.6 m span into 40 strips. In a turn of radius R
+each strip flies at `V (1 + y cos(bank) / R)`: the slower inner wing lifts
+less, the ailerons must add lift there to hold the bank, so the inner tip
+reaches stall before the mean wing does, the ailerons can run out of
+authority, and their deflection costs drag. Turn on with `strip_wing` in a
+scenario (constraints `wing_stall`, `aileron`; aileron drag added to the
+thrust the trajectory needs).
+
+![Turn limits](docs/figures/turn_limits.png)
+
+At thermalling speed (9 m/s) the smallest steady radius is 18 m with the strip
+wing against 9 m for the point mass; the absolute minimum is about 11 m, at
+10.5 m/s.
+
+Re-running the comparison with the strip wing applied to every method (77
+situations; `phase3_realism.py --strip`):
+
+| Method | Solved | Mean cost | Gap to teacher |
+| --- | --- | --- | --- |
+| Teacher, re-solved with the strip wing | 100 % | -4.70 | - |
+| Physics latent GA | 100 % | -4.28 | +0.42 |
+| 64 prior samples of the physics VAE | 66 % | -1.23 | 3.70 |
+
+Realistic wing physics costs everyone (the teacher loses 0.5 units: it too
+was turning tighter and slower than a real wing allows), and the latent GA's
+advantage disappears: it searches a space learned from point-mass
+trajectories, whose best circles are now forbidden, while the NLP adapts to
+the new constraint directly. The fix is in the data: regenerate the teacher's
+dataset with the strip wing and retrain the command VAE on it.
+
 ### Integration note (RK4)
 
 The first simulators used explicit Euler steps. Lift turns the velocity, and
@@ -284,8 +317,8 @@ optimistic (on the 77 Savio situations: -3.73 with Euler, -3.57 with RK4).
 Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
-Next steps: a strip (span-resolved) wing model to settle the real turn
-limit, retraining the command VAE under that limit, then phase 4:
+Next steps: regenerate the teacher's dataset with the strip wing (Savio),
+retrain the command VAE on it and rerun the comparison, then phase 4:
 closed-loop flight with turbulence and wind-estimation errors (H5).
 
 ## Usage
@@ -329,6 +362,7 @@ squeue -u $USER
 bash slurm/submit_all.sh train # later: retrain only, on the merged dataset
 bash slurm/submit_all.sh latent    # latent GA (position VAE)
 bash slurm/submit_all.sh physics   # latent GA with the physics decoder
+bash slurm/submit_all.sh strip     # strip wing: teacher re-solved, then the physics decoder (phase3_strip/)
 ```
 
 Results land in `/global/scratch/users/$USER/geneticwing/phase3/students/n_<size>/`

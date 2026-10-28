@@ -9,7 +9,9 @@ the coordinated-turn radius ``V_a^2 / (g tan|bank|)``, for several radii:
 * Physics GA    - the latent GA over the command VAE, scored under the limit
 
 If the gain only came from turns too tight for a real sailplane, it shrinks
-as the radius grows. The command VAE is the one trained by phase3_physics.py
+as the radius grows. With ``--strip``, the limit is physical instead: the
+strip-theory wing of ``geneticwing.strip`` (inner-wing stall, aileron
+authority, aileron drag) applies to every method. The command VAE is the one trained by phase3_physics.py
 (``--margins``), loaded from ``--vae``.
 
 Run: ``python scenarios/phase3_realism.py --data D/dataset.npz --theta D/theta.npy --vae D/physics/command_vae_d16.pt``
@@ -36,6 +38,7 @@ from geneticwing.planning.local import solve_local
 from geneticwing.policies import simulate_law
 from geneticwing.seeding import fit_genome
 from geneticwing.soaring import SoaringProblem
+from geneticwing.strip import sbxc_wing
 from geneticwing.torchsim import SimConfig
 
 DIRECTION_GENE = 6
@@ -61,8 +64,12 @@ def _radius(r):
     return None if r <= 0 else float(r)
 
 
-def teacher_under_limit(instance, radius, theta, nlp_budget):
-    scenario = replace(s1_family(instance)[0], turn_radius_min=radius)
+def _overrides(radius_m, strip: bool) -> dict:
+    return {"turn_radius_min": _radius(radius_m), "strip_wing": sbxc_wing() if strip else None}
+
+
+def teacher_under_limit(instance, overrides, theta, nlp_budget):
+    scenario = replace(s1_family(instance)[0], **overrides)
     nominal, robust = SoaringProblem(scenario), SoaringProblem(with_margins(scenario))
     best = np.nan
     for ccw in (True, False):
@@ -79,13 +86,13 @@ def teacher_under_limit(instance, radius, theta, nlp_budget):
 
 def evaluate(job):
     instance, context, radius_m = job
-    radius = _radius(radius_m)
+    overrides = _overrides(radius_m, _CFG["strip"])
     sim = _sim(_CFG)
     out = {}
     t0 = time.perf_counter()
-    out["Teacher"] = (teacher_under_limit(instance, radius, _CFG["theta"], _CFG["nlp_budget"]), time.perf_counter() - t0)
+    out["Teacher"] = (teacher_under_limit(instance, overrides, _CFG["theta"], _CFG["nlp_budget"]), time.perf_counter() - t0)
 
-    problem = SoaringProblem(canonical_scenario(context, radius))
+    problem = SoaringProblem(canonical_scenario(context, **overrides))
     rng = np.random.default_rng(instance)
     t0 = time.perf_counter()
     ev = fly(_VAE.decode(rng.standard_normal((64, _VAE.latent_dim)), context), context, sim, problem)
@@ -94,7 +101,7 @@ def evaluate(job):
 
     t0 = time.perf_counter()
     _, cost, feasible = command_latent_search(_VAE, context, sim, _CFG["search_budget"], rng,
-                                             np.zeros((1, _VAE.latent_dim)), turn_radius_min=radius)
+                                             np.zeros((1, _VAE.latent_dim)), **overrides)
     out["Physics latent GA"] = (cost if feasible else np.nan, time.perf_counter() - t0)
     return instance, radius_m, out
 
@@ -114,6 +121,7 @@ def main() -> None:
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--depth", type=int, default=3)
     parser.add_argument("--workers", type=int, default=os.cpu_count())
+    parser.add_argument("--strip", action="store_true", help="apply the strip-theory wing to every method")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
@@ -124,7 +132,8 @@ def main() -> None:
     contexts = {i: d["rec_heading_context"][test_mask & (d["rec_instance"] == i)][0] for i in test}
     state = torch.load(args.vae, weights_only=False, map_location="cpu")
     cfg = {"context_dim": 6, "width": args.width, "depth": args.depth, "dt": args.dt, "knots": args.knots,
-           "theta": np.load(args.theta), "nlp_budget": args.nlp_budget, "search_budget": args.search_budget}
+           "theta": np.load(args.theta), "nlp_budget": args.nlp_budget, "search_budget": args.search_budget,
+           "strip": args.strip}
     jobs = [(i, contexts[i], r) for r in args.radii for i in test]
     print(f"{len(test)} situations x {len(args.radii)} radii, {args.workers} workers", flush=True)
 
@@ -149,7 +158,7 @@ def main() -> None:
                 "median_s": float(np.median([results[r][i][m][1] for i in test])),
             }
             summary[f"{r:g} | {m}"] = row
-            label = "none" if r <= 0 else f"{r:g} m"
+            label = ("strip" if args.strip else "none") if r <= 0 else f"{r:g} m"
             lines.append(
                 f"{label:>6} | {m:<18}{100 * row['solved']:>7.0f}%"
                 f"{(row['mean_cost'] if row['mean_cost'] is not None else float('nan')):>11.2f}"

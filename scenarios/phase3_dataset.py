@@ -8,7 +8,9 @@ modes the student must learn to tell apart.
 
 The teacher solves with tightened constraints (``with_margins``) and its
 solutions are scored under the nominal ones: optimal solutions on their
-active constraints break under the slightest imitation error.
+active constraints break under the slightest imitation error. With
+``--strip``, every problem carries the strip-theory wing (inner-wing stall,
+ailerons, aileron drag).
 
 Run, whole dataset at once: ``python scenarios/phase3_dataset.py --train 600 --test 80``
 (writes ``results/phase3/dataset.npz``). On a cluster, in shards sharing one law:
@@ -21,6 +23,7 @@ Run, whole dataset at once: ``python scenarios/phase3_dataset.py --train 600 --t
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -36,6 +39,7 @@ from geneticwing.planning.local import solve_local  # noqa: E402
 from geneticwing.policies import simulate_law, tune_law  # noqa: E402
 from geneticwing.seeding import fit_genome  # noqa: E402
 from geneticwing.soaring import SoaringProblem  # noqa: E402
+from geneticwing.strip import sbxc_wing  # noqa: E402
 
 LAW_TRAINING = tuple(range(90_000, 90_004))
 LAW_BUDGET = 1_200
@@ -43,9 +47,14 @@ NLP_BUDGET = 6_000
 DIRECTION_GENE = 6  # > 0.5 is counter-clockwise
 
 
-def solve_instance(job):
-    instance, theta, nlp_budget = job
+def _family(instance: int, strip: bool):
     scenario, context = s1_family(instance)
+    return (replace(scenario, strip_wing=sbxc_wing()) if strip else scenario), context
+
+
+def solve_instance(job):
+    instance, theta, nlp_budget, strip = job
+    scenario, context = _family(instance, strip)
     problem = SoaringProblem(scenario)
     robust = SoaringProblem(with_margins(scenario))
     solutions = []
@@ -71,18 +80,18 @@ def solve_instance(job):
     return instance, (context, heading_frame_context(scenario)), solutions
 
 
-def tune_family_law(budget: int) -> tuple[np.ndarray, float]:
-    train_problems = [SoaringProblem(s1_family(i)[0]) for i in LAW_TRAINING]
+def tune_family_law(budget: int, strip: bool = False) -> tuple[np.ndarray, float]:
+    train_problems = [SoaringProblem(_family(i, strip)[0]) for i in LAW_TRAINING]
     return tune_law(train_problems, budget, np.random.default_rng(3))
 
 
-def generate(instances, splits, theta, nlp_budget, workers, start, path: Path) -> None:
+def generate(instances, splits, theta, nlp_budget, workers, start, path: Path, strip: bool = False) -> None:
     """Solve ``instances`` and save one dataset file (a full dataset or a shard)."""
     records = {"instance": [], "context": [], "heading_context": [], "genome": [], "cost": [], "ccw": [], "split": []}
     teacher = {"instance": [], "best_cost": [], "law_cost": [], "feasible_modes": []}
     split_of = dict(zip(instances, splits))
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        jobs = [(i, theta, nlp_budget) for i in instances]
+        jobs = [(i, theta, nlp_budget, strip) for i in instances]
         for k, (instance, (context, heading_context), solutions) in enumerate(pool.map(solve_instance, jobs, chunksize=4)):
             feasible = [s for s in solutions if s["feasible"]]
             for s in feasible:
@@ -129,6 +138,7 @@ def main() -> None:
     parser.add_argument("--count", type=int, help="shard mode: number of instances")
     parser.add_argument("--split", choices=("train", "test"), default="train", help="shard mode: split label")
     parser.add_argument("--name", default="dataset", help="output file name, without .npz")
+    parser.add_argument("--strip", action="store_true", help="teacher and scoring with the strip-theory wing")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -137,7 +147,7 @@ def main() -> None:
         theta = np.load(args.theta)
         print(f"law loaded from {args.theta}", flush=True)
     else:
-        theta, f = tune_family_law(args.law_budget)
+        theta, f = tune_family_law(args.law_budget, args.strip)
         print(f"[{time.perf_counter() - start:5.0f}s] law tuned on the family, mean fitness {f:.2f}", flush=True)
     if args.tune_law_only:
         np.save(args.out / "theta.npy", theta)
@@ -150,7 +160,7 @@ def main() -> None:
     else:
         instances = list(range(args.train + args.test))
         splits = ["train" if i < args.train else "test" for i in instances]
-    generate(instances, splits, theta, args.nlp_budget, args.workers, start, args.out / f"{args.name}.npz")
+    generate(instances, splits, theta, args.nlp_budget, args.workers, start, args.out / f"{args.name}.npz", args.strip)
 
 
 if __name__ == "__main__":

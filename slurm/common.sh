@@ -4,7 +4,11 @@ module load "$PYTHON_MODULE"
 source "$VENV/bin/activate"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export PYTHONUNBUFFERED=1
-DATA="${WORK}/phase3"
+DATA="${WORK}/${PHASE3_NAME}"
+strip_flag=()
+if [ "${STRIP:-0}" = "1" ]; then
+    strip_flag=(--strip)
+fi
 mkdir -p "$DATA/shards" "$DATA/logs"
 
 # Worker counts come from what SLURM granted. Not from `nproc`: GNU nproc

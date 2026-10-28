@@ -105,6 +105,30 @@ def methods(src: Path, out: Path) -> None:
     plt.close(fig)
 
 
+def turn_limits(out: Path) -> None:
+    import numpy as np
+
+    from geneticwing.aircraft import SBXC_APPROX
+    from geneticwing.strip import minimum_turn_radius, sbxc_wing
+
+    wing, speeds = sbxc_wing(), np.linspace(8.5, 14.0, 23)
+    limit = 0.9 * SBXC_APPROX.cl_max
+    point = [minimum_turn_radius(wing, SBXC_APPROX, v, limit)["point_mass"] for v in speeds]
+    strip = [minimum_turn_radius(wing, SBXC_APPROX, v, limit)["strip"] for v in speeds]
+    fig, ax = plt.subplots(figsize=(7.5, 4.2), constrained_layout=True)
+    _style(ax)
+    ax.plot(speeds, point, color=SERIES[0], linewidth=2, label="point mass (mean C_L only)")
+    ax.plot(speeds, strip, color=SERIES[1], linewidth=2, label="strip wing (inner-tip stall, ailerons)")
+    ax.set_ylim(0, 40)
+    ax.set_xlabel("airspeed (m/s)", color=MUTED)
+    ax.set_ylabel("smallest steady turn radius (m)", color=MUTED)
+    ax.set_title("At thermalling speeds the inner wingtip stalls long before the mean wing does",
+                 loc="left", fontsize=11, color=INK)
+    ax.legend(frameon=False, fontsize=9)
+    fig.savefig(out / "turn_limits.png", dpi=150)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--src", type=Path, default=Path("results/savio_phase3"))
@@ -113,7 +137,8 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     scaling(args.src, args.out)
     methods(args.src, args.out)
-    print(f"wrote {args.out / 'savio_scaling.png'} and {args.out / 'savio_methods.png'}")
+    turn_limits(args.out)
+    print(f"wrote savio_scaling.png, savio_methods.png and turn_limits.png to {args.out}")
 
 
 if __name__ == "__main__":
