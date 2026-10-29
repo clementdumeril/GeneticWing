@@ -383,6 +383,36 @@ the teacher by 0.84 at d = 32 (0.82 at d = 16), the same margin as for the
 point mass on Savio (0.82). The 1.05 of the 3,080-situation run came from an
 easier test set and a weaker teacher. The command representation itself costs
 0.43 (the teacher's commands flown), which bounds what the prior alone can do.
+
+### Sensitivity to the SB-XC's estimated polar
+
+The SB-XC's C_D0, C_L max and mass are estimates. `submit_all.sh sensitivity`
+scales one of them by 0.8 or 1.2 for every method (teacher re-solved with both
+seeds, the strip wing's section stall following C_L max); the command VAE
+stays the one trained on the nominal airframe. Savio strip run, 65 test
+situations, d = 16:
+
+| Airframe | Teacher (solved) | 64 prior samples | Physics latent GA | Gap (GA - teacher) |
+| --- | --- | --- | --- | --- |
+| nominal | -4.91 (100 %) | -4.64 | -5.69 | **-0.79** |
+| C_D0 x 0.8 | -5.48 (100 %) | -5.13 | -6.29 | -0.81 |
+| C_D0 x 1.2 | -4.44 (100 %) | -4.24 | -5.23 | -0.79 |
+| C_L max x 1.2 | -5.30 (100 %) | -5.29 | -6.24 | -0.94 |
+| mass x 0.8 | -5.70 (100 %) | -5.57 | -6.93 | -1.23 |
+| C_L max x 0.8 | -4.11 (89 %) | -2.53 | -4.49 | -0.09 |
+| mass x 1.2 | -4.36 (100 %) | -2.81 | -4.49 | -0.13 |
+
+Drag moves every method by about 0.5 and leaves the gap at -0.8: the estimated
+C_D0 does not weaken the comparison. The stall margin does. A heavier airframe
+or a lower C_L max flies closer to the stall, as the strip wing's inner tip
+already did, and the latent GA's advantage almost vanishes (-0.1), though it
+still solves every situation where the teacher drops 11 % at C_L max x 0.8; a
+lighter one or a higher C_L max widens it. Without search the prior does not
+transfer: 1.5 to 1.8 behind the teacher when the stall margin shrinks. The
+number to measure on the real airframe is therefore its wing loading and
+C_L max, and a decoder conditioned on them would cover several loadings.
+With the one-seed teacher, the same runs gave gaps 0.1 larger
+(`phase3_strip_v2/sensitivity_one_seed/` on Savio).
 Tuned under the strip wing, the GA on the law's parameters converged to orbits
 the NLP could not repair: on 16 test situations, 3 feasible at +0.45 against
 13 feasible at -5.41 with the point-mass law. The first strip run used that
@@ -401,8 +431,7 @@ Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
 Next steps: the 17 % of situations the two-seed teacher still leaves unsolved;
-the sensitivity of the comparison to the
-SB-XC's estimated polar (`submit_all.sh sensitivity`); then phase 4: closed-loop flight with turbulence and
+a command decoder conditioned on wing loading and C_L max; then phase 4: closed-loop flight with turbulence and
 wind-estimation errors (H5).
 
 ## Usage
