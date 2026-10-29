@@ -351,6 +351,14 @@ feasible but harvest nothing. Re-solving the teacher's own seed on another
 machine also rescues 3-19 % of the situations: SLSQP from the same start
 lands differently with numpy 2.2 on Windows and 2.5 on Linux.
 
+The strip teacher now seeds each orbit direction twice, with the tuned law
+and with the faster orbit, and keeps the better solution (`law_seeds` in
+`phase3_dataset.py`; the dataset's `rec_seed` says which won). On test
+situations 600-631: unsolved situations 12 -> 4, solutions 34 -> 49 (40 of them
+from the faster orbit), a better cost on 17 of the 20 situations both teachers
+solve (mean -5.43 against -5.34), 8 rescued at -4.59, none lost; about 2.2
+times the teacher's time.
+
 The seed law is tuned on the point-mass wing, also for `--strip` datasets.
 Tuned under the strip wing, the GA on the law's parameters converged to orbits
 the NLP could not repair: on 16 test situations, 3 feasible at +0.45 against
@@ -369,8 +377,8 @@ optimistic (on the 77 Savio situations: -3.73 with Euler, -3.57 with RK4).
 Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
-Next steps: a teacher that also seeds the NLP with the faster orbit, and the
-strip dataset regenerated with it; the sensitivity of the comparison to the
+Next steps: the strip dataset regenerated with the two-seed teacher, and the
+command VAE retrained on it; the sensitivity of the comparison to the
 SB-XC's estimated polar (`submit_all.sh sensitivity`); then phase 4: closed-loop flight with turbulence and
 wind-estimation errors (H5).
 
