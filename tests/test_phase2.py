@@ -4,7 +4,7 @@ import pytest
 from geneticwing.benchmarks import SCENARIOS
 from geneticwing.evolution import CMAES, RealGA, ZohdiGA
 from geneticwing.planning.local import single_start
-from geneticwing.policies import N_PARAMS, lift_anchors, simulate_law
+from geneticwing.policies import N_PARAMS, decode, lift_anchors, law_seeds, seed_theta, simulate_law
 from geneticwing.soaring import INFEASIBLE_OFFSET, SoaringProblem
 from geneticwing.spline import ClampedBSpline
 
@@ -104,3 +104,16 @@ def test_turn_radius_limit_matches_the_coordinated_turn_radius():
     tight = SoaringProblem(replace(base, turn_radius_min=1.1 * radius)).hinges(s)["turn_radius"]
     assert np.all(loose < 0) and np.all(tight > 0)
     assert np.all(SoaringProblem(base).hinges(s)["turn_radius"] < 0)  # no limit by default
+
+
+def test_strip_teacher_adds_a_faster_orbit_seed(s1):
+    assert law_seeds(False) == ({},)
+    plain, fast = law_seeds(True)
+    theta = np.full(N_PARAMS, 0.5)
+    problem = s1
+    for ccw, direction in ((True, 1.0), (False, -1.0)):
+        base, quick = decode(seed_theta(theta, ccw, plain), problem), decode(seed_theta(theta, ccw, fast), problem)
+        assert base["direction"][0] == quick["direction"][0] == direction
+        assert quick["v_orbit"][0] > base["v_orbit"][0]
+        assert quick["radius"][0] == base["radius"][0]
+    assert theta[6] == 0.5  # the tuned law is not modified in place

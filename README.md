@@ -360,6 +360,29 @@ solve (mean -5.43 against -5.34), 8 rescued at -4.59, none lost; about 2.2
 times the teacher's time.
 
 The seed law is tuned on the point-mass wing, also for `--strip` datasets.
+
+### Strip wing at Savio scale (reference)
+
+`PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh strip`: the two-seed
+teacher on the 15,080 situations, 21 nodes for about 15 minutes, then the
+physics study. 21,034 solutions (20,923 for training); the faster orbit wins
+83 % of them. About 17 % of the situations stay unsolved (2,479 of 15,000 for
+training, 15 of 80 for test), against 39 % with one seed; 65 test situations
+remain, where the teacher averages -4.88.
+
+| Method (65 test situations) | d = 8 | d = 16 | d = 32 |
+| --- | --- | --- | --- |
+| Teacher | -4.88 | -4.88 | -4.88 |
+| Teacher's commands, flown | -4.45 | -4.45 | -4.45 |
+| 64 prior samples of the command VAE (solved) | -4.72 (100 %) | -4.64 (100 %) | -4.65 (100 %) |
+| Physics latent GA | -5.37 | -5.69 | **-5.72** |
+| Physics latent GA + NLP | -5.36 | -5.66 | -5.72 |
+
+With seven times the data and a stronger teacher, the latent GA still beats
+the teacher by 0.84 at d = 32 (0.82 at d = 16), the same margin as for the
+point mass on Savio (0.82). The 1.05 of the 3,080-situation run came from an
+easier test set and a weaker teacher. The command representation itself costs
+0.43 (the teacher's commands flown), which bounds what the prior alone can do.
 Tuned under the strip wing, the GA on the law's parameters converged to orbits
 the NLP could not repair: on 16 test situations, 3 feasible at +0.45 against
 13 feasible at -5.41 with the point-mass law. The first strip run used that
@@ -377,8 +400,8 @@ optimistic (on the 77 Savio situations: -3.73 with Euler, -3.57 with RK4).
 Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
-Next steps: the strip dataset regenerated with the two-seed teacher, and the
-command VAE retrained on it; the sensitivity of the comparison to the
+Next steps: the 17 % of situations the two-seed teacher still leaves unsolved;
+the sensitivity of the comparison to the
 SB-XC's estimated polar (`submit_all.sh sensitivity`); then phase 4: closed-loop flight with turbulence and
 wind-estimation errors (H5).
 
@@ -424,7 +447,8 @@ bash slurm/submit_all.sh train # later: retrain only, on the merged dataset
 bash slurm/submit_all.sh latent    # latent GA (position VAE)
 bash slurm/submit_all.sh physics   # latent GA with the physics decoder
 bash slurm/submit_all.sh strip     # strip wing: teacher re-solved, then the physics decoder (phase3_strip/)
-bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 %, on the strip comparison (dataset and VAE copied to phase3_strip/)
+bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 %, on the strip comparison (dataset and VAE in phase3_strip/)
+PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh sensitivity  # the same on the Savio strip run
 ```
 
 Results land in `/global/scratch/users/$USER/geneticwing/phase3/students/n_<size>/`

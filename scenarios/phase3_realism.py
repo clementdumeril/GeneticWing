@@ -5,6 +5,7 @@ than the teacher's genome allowed. Here every method faces the same limit on
 the coordinated-turn radius ``V_a^2 / (g tan|bank|)``, for several radii:
 
 * Teacher       - re-solved under the limit: law flight, fitted genome, NLP with margins
+                  (under the strip wing, also from the faster orbit, as the dataset's teacher)
 * VAE prior x64 - 64 prior samples of the command VAE, flown, best feasible kept
 * Physics GA    - the latent GA over the command VAE, scored under the limit
 
@@ -38,13 +39,12 @@ from geneticwing.benchmarks import MOTOR_THRUST, canonical_scenario, s1_family, 
 from geneticwing.latent import ConditionalVAE
 from geneticwing.physvae import command_latent_search, fly
 from geneticwing.planning.local import solve_local
-from geneticwing.policies import simulate_law
+from geneticwing.policies import law_seeds, seed_theta, simulate_law
 from geneticwing.seeding import fit_genome
 from geneticwing.soaring import SoaringProblem
 from geneticwing.strip import sbxc_wing
 from geneticwing.torchsim import SimConfig
 
-DIRECTION_GENE = 6
 _VAE: ConditionalVAE | None = None
 _CFG: dict = {}
 
@@ -96,14 +96,13 @@ def teacher_under_limit(instance, overrides, theta, nlp_budget):
     nominal, robust = SoaringProblem(scenario), SoaringProblem(with_margins(scenario))
     best = np.nan
     for ccw in (True, False):
-        th = np.array(theta)
-        th[DIRECTION_GENE] = 0.75 if ccw else 0.25
-        law = simulate_law(robust, th[None])
-        genome = fit_genome(robust, law.state.t[0], law.state.position[0])
-        refined, _ = solve_local(robust, genome, nlp_budget)
-        ev = nominal.evaluate(refined.x[None])
-        if ev.feasible[0] and not ev.cost[0] >= best:
-            best = float(ev.cost[0])
+        for overrides in law_seeds(scenario.strip_wing is not None):  # the dataset teacher's seeds
+            law = simulate_law(robust, seed_theta(theta, ccw, overrides)[None])
+            genome = fit_genome(robust, law.state.t[0], law.state.position[0])
+            refined, _ = solve_local(robust, genome, nlp_budget)
+            ev = nominal.evaluate(refined.x[None])
+            if ev.feasible[0] and not ev.cost[0] >= best:
+                best = float(ev.cost[0])
     return best
 
 
