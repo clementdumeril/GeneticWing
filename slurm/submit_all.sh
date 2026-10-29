@@ -7,13 +7,14 @@
 #   bash slurm/submit_all.sh latent     # only the latent GA (dataset already merged)
 #   bash slurm/submit_all.sh physics    # only the latent GA with the physics decoder
 #   bash slurm/submit_all.sh strip      # strip-theory wing: law -> shards -> merge -> physics,
-#                                       # in $WORK/phase3_strip
+#                                       # in $WORK/phase3_strip (or $PHASE3_NAME)
 #   bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 % on the strip comparison
 #                                       # (needs the strip dataset and command VAE in $WORK/phase3_strip)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ "${1:-all}" = "strip" ] || [ "${1:-all}" = "sensitivity" ]; then
-    export STRIP=1 PHASE3_NAME=phase3_strip
+    # Another folder keeps an earlier strip run:  PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh strip
+    export STRIP=1 PHASE3_NAME=${PHASE3_NAME:-phase3_strip}
 fi
 source slurm/config.sh
 

@@ -13,7 +13,10 @@ active constraints break under the slightest imitation error. With
 ailerons, aileron drag). The law is still tuned without it: it only seeds
 the NLP, and tuned under the strip wing it converges to orbits the NLP cannot
 repair (3 instances of 16 feasible against 13 of 16, test costs +0.45 against
--5.41).
+-5.41). Under the strip wing every orbit direction is also seeded with a
+faster orbit, and the better of the two solutions is kept: the teacher's
+failures all end with the inner wing stalled, and a faster orbit (lower lift
+coefficient) rescues half of them (``phase3_unsolved.py``).
 
 Run, whole dataset at once: ``python scenarios/phase3_dataset.py --train 600 --test 80``
 (writes ``results/phase3/dataset.npz``). On a cluster, in shards sharing one law:
@@ -48,6 +51,12 @@ LAW_TRAINING = tuple(range(90_000, 90_004))
 LAW_BUDGET = 1_200
 NLP_BUDGET = 6_000
 DIRECTION_GENE = 6  # > 0.5 is counter-clockwise
+ORBIT_SPEED_GENE, FAST_ORBIT = 1, 0.8  # about 1.37 times the min-drag speed
+
+
+def law_seeds(strip: bool) -> tuple[dict, ...]:
+    """Overrides of the law's genes, one NLP seed each (per orbit direction)."""
+    return ({}, {ORBIT_SPEED_GENE: FAST_ORBIT}) if strip else ({},)
 
 
 def _family(instance: int, strip: bool):
@@ -62,24 +71,24 @@ def solve_instance(job):
     robust = SoaringProblem(with_margins(scenario))
     solutions = []
     for ccw in (True, False):
-        th = np.array(theta)
-        th[DIRECTION_GENE] = 0.75 if ccw else 0.25
-        law = simulate_law(robust, th[None])
-        genome = fit_genome(robust, law.state.t[0], law.state.position[0])
-        refined, _ = solve_local(robust, genome, nlp_budget)
-        if not robust.evaluate(refined.x[None]).feasible[0]:
-            continue
-        ev = problem.evaluate(refined.x[None])
-        solutions.append(
-            {
-                "genome": refined.x,
-                "cost": float(ev.cost[0]),
-                "feasible": bool(ev.feasible[0]),
-                "law_cost": float(law.cost[0]),
-                "law_feasible": bool(law.feasible[0]),
-                "ccw": ccw,
-            }
-        )
+        best = None
+        for k, overrides in enumerate(law_seeds(strip)):
+            th = np.array(theta)
+            th[DIRECTION_GENE] = 0.75 if ccw else 0.25
+            for gene, value in overrides.items():
+                th[gene] = value
+            law = simulate_law(robust, th[None])
+            if k == 0:  # the tuned law's own flight, for the "law alone" statistic
+                law_cost, law_feasible = float(law.cost[0]), bool(law.feasible[0])
+            genome = fit_genome(robust, law.state.t[0], law.state.position[0])
+            refined, _ = solve_local(robust, genome, nlp_budget)
+            if not robust.evaluate(refined.x[None]).feasible[0]:
+                continue
+            ev = problem.evaluate(refined.x[None])
+            if best is None or ev.cost[0] < best["cost"]:
+                best = {"genome": refined.x, "cost": float(ev.cost[0]), "feasible": bool(ev.feasible[0]), "seed": k}
+        if best is not None:
+            solutions.append({**best, "law_cost": law_cost, "law_feasible": law_feasible, "ccw": ccw})
     return instance, (context, heading_frame_context(scenario)), solutions
 
 
@@ -91,7 +100,8 @@ def tune_family_law(budget: int) -> tuple[np.ndarray, float]:
 
 def generate(instances, splits, theta, nlp_budget, workers, start, path: Path, strip: bool = False) -> None:
     """Solve ``instances`` and save one dataset file (a full dataset or a shard)."""
-    records = {"instance": [], "context": [], "heading_context": [], "genome": [], "cost": [], "ccw": [], "split": []}
+    records = {"instance": [], "context": [], "heading_context": [], "genome": [], "cost": [], "ccw": [], "seed": [],
+               "split": []}
     teacher = {"instance": [], "best_cost": [], "law_cost": [], "feasible_modes": []}
     split_of = dict(zip(instances, splits))
     with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -105,6 +115,7 @@ def generate(instances, splits, theta, nlp_budget, workers, start, path: Path, s
                 records["genome"].append(s["genome"])
                 records["cost"].append(s["cost"])
                 records["ccw"].append(s["ccw"])
+                records["seed"].append(s["seed"])  # index in law_seeds(): 1 = the faster orbit
                 records["split"].append(split_of[instance])
             teacher["instance"].append(instance)
             teacher["best_cost"].append(min((s["cost"] for s in feasible), default=np.nan))
@@ -123,7 +134,8 @@ def generate(instances, splits, theta, nlp_budget, workers, start, path: Path, s
     print(
         f"done in {time.perf_counter() - start:.0f}s: {len(records['genome'])} solutions, "
         f"instances with 2 / 1 / 0 feasible modes: {(modes == 2).sum()} / {(modes == 1).sum()} / {(modes == 0).sum()}, "
-        f"teacher mean cost {np.nanmean(teacher['best_cost']):.2f}, law alone {np.nanmean(teacher['law_cost']):.2f}"
+        f"teacher mean cost {np.nanmean(teacher['best_cost']):.2f}, law alone {np.nanmean(teacher['law_cost']):.2f}, "
+        f"{int(np.sum(np.array(records['seed']) > 0))} solutions from the faster orbit"
         f" -> {path}"
     )
 
