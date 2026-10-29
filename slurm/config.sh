@@ -72,3 +72,9 @@ TIME_LATENT="03:00:00"
 PHYSICS_DIMS=(8 16 32)
 PHYSICS_MARGINS=1                # 1: commands bounded by the teacher's margins (fair comparison)
 TIME_PHYSICS="04:00:00"
+
+# --- Airframe sensitivity (bash slurm/submit_all.sh sensitivity) --------------
+# The SB-XC's C_D0, C_L max and mass are estimates: each variant scales one of
+# them, and the teacher and the physics latent GA both fly the variant.
+SENSITIVITY_AIRFRAMES=(nominal cd0:0.8 cd0:1.2 cl_max:0.8 cl_max:1.2 mass:0.8 mass:1.2)
+TIME_SENSITIVITY="02:00:00"

@@ -12,7 +12,10 @@ If the gain only came from turns too tight for a real sailplane, it shrinks
 as the radius grows. With ``--strip``, the limit is physical instead: the
 strip-theory wing of ``geneticwing.strip`` (inner-wing stall, aileron
 authority, aileron drag) applies to every method. The command VAE is the one trained by phase3_physics.py
-(``--margins``), loaded from ``--vae``.
+(``--margins``), loaded from ``--vae``. ``--airframes`` repeats the test on
+SB-XC variants (``cd0:1.2``, ``cl_max:0.8``, ``mass:1.2``...): every method,
+teacher included, flies the modified airframe, while the command VAE stays
+the one trained on the nominal one -- a sensitivity test of the estimated polar.
 
 Run: ``python scenarios/phase3_realism.py --data D/dataset.npz --theta D/theta.npy --vae D/physics/command_vae_d16.pt``
 """
@@ -46,8 +49,8 @@ _VAE: ConditionalVAE | None = None
 _CFG: dict = {}
 
 
-def _sim(cfg) -> SimConfig:
-    return SimConfig(SBXC_APPROX, dt=cfg["dt"], knots=cfg["knots"], cl_limit=0.75, bank_max_deg=38.0,
+def _sim(cfg, aircraft=SBXC_APPROX) -> SimConfig:
+    return SimConfig(aircraft, dt=cfg["dt"], knots=cfg["knots"], cl_limit=0.75, bank_max_deg=38.0,
                      load_max=2.1, thrust_max=0.8 * MOTOR_THRUST)
 
 
@@ -64,8 +67,28 @@ def _radius(r):
     return None if r <= 0 else float(r)
 
 
-def _overrides(radius_m, strip: bool) -> dict:
-    return {"turn_radius_min": _radius(radius_m), "strip_wing": sbxc_wing() if strip else None}
+AIRFRAME_PARAMS = ("cd0", "cl_max", "mass")
+
+
+def airframe(spec: str):
+    """``nominal`` or ``<param>:<factor>`` (param in AIRFRAME_PARAMS) -> (aircraft, C_L max factor)."""
+    if spec == "nominal":
+        return SBXC_APPROX, 1.0
+    name, factor = spec.split(":")
+    if name not in AIRFRAME_PARAMS:
+        raise ValueError(f"unknown airframe parameter {name!r}, expected one of {AIRFRAME_PARAMS}")
+    factor = float(factor)
+    aircraft = replace(SBXC_APPROX, **{name: getattr(SBXC_APPROX, name) * factor})
+    return aircraft, (factor if name == "cl_max" else 1.0)
+
+
+def _overrides(radius_m, strip: bool, spec: str = "nominal") -> dict:
+    aircraft, cl_factor = airframe(spec)
+    wing = None
+    if strip:  # the sections stall at the aircraft's C_L max
+        wing = sbxc_wing()
+        wing = replace(wing, local_cl_max=wing.local_cl_max * cl_factor)
+    return {"turn_radius_min": _radius(radius_m), "strip_wing": wing, "aircraft": aircraft}
 
 
 def teacher_under_limit(instance, overrides, theta, nlp_budget):
@@ -85,9 +108,9 @@ def teacher_under_limit(instance, overrides, theta, nlp_budget):
 
 
 def evaluate(job):
-    instance, context, radius_m = job
-    overrides = _overrides(radius_m, _CFG["strip"])
-    sim = _sim(_CFG)
+    instance, context, radius_m, spec = job
+    overrides = _overrides(radius_m, _CFG["strip"], spec)
+    sim = _sim(_CFG, overrides["aircraft"])
     out = {}
     t0 = time.perf_counter()
     out["Teacher"] = (teacher_under_limit(instance, overrides, _CFG["theta"], _CFG["nlp_budget"]), time.perf_counter() - t0)
@@ -103,7 +126,7 @@ def evaluate(job):
     _, cost, feasible = command_latent_search(_VAE, context, sim, _CFG["search_budget"], rng,
                                              np.zeros((1, _VAE.latent_dim)), **overrides)
     out["Physics latent GA"] = (cost if feasible else np.nan, time.perf_counter() - t0)
-    return instance, radius_m, out
+    return instance, (radius_m, spec), out
 
 
 def main() -> None:
@@ -122,6 +145,8 @@ def main() -> None:
     parser.add_argument("--depth", type=int, default=3)
     parser.add_argument("--workers", type=int, default=os.cpu_count())
     parser.add_argument("--strip", action="store_true", help="apply the strip-theory wing to every method")
+    parser.add_argument("--airframes", nargs="+", default=["nominal"],
+                        help="SB-XC variants for every method: nominal or <param>:<factor>, param in cd0, cl_max, mass")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
@@ -134,33 +159,37 @@ def main() -> None:
     cfg = {"context_dim": 6, "width": args.width, "depth": args.depth, "dt": args.dt, "knots": args.knots,
            "theta": np.load(args.theta), "nlp_budget": args.nlp_budget, "search_budget": args.search_budget,
            "strip": args.strip}
-    jobs = [(i, contexts[i], r) for r in args.radii for i in test]
-    print(f"{len(test)} situations x {len(args.radii)} radii, {args.workers} workers", flush=True)
+    for spec in args.airframes:
+        airframe(spec)  # fail before the pool starts
+    conditions = [(r, a) for r in args.radii for a in args.airframes]
+    jobs = [(i, contexts[i], r, a) for r, a in conditions for i in test]
+    print(f"{len(test)} situations x {len(args.radii)} radii x {len(args.airframes)} airframes, "
+          f"{args.workers} workers", flush=True)
 
-    results: dict = {r: {} for r in args.radii}
+    results: dict = {c: {} for c in conditions}
     with ProcessPoolExecutor(max_workers=args.workers, initializer=_init_worker, initargs=(state, cfg)) as pool:
-        for k, (instance, radius, out) in enumerate(pool.map(evaluate, jobs, chunksize=1)):
-            results[radius][instance] = out
+        for k, (instance, condition, out) in enumerate(pool.map(evaluate, jobs, chunksize=1)):
+            results[condition][instance] = out
             if k % 25 == 0:
                 print(f"[{time.perf_counter() - start:6.0f}s] {k + 1}/{len(jobs)}", flush=True)
 
-    lines = [f"{'R_min':>6} | {'method':<18}{'solved':>8}{'mean cost':>11}{'gap to teacher':>16}{'median s':>10}"]
+    lines = [f"{'R_min':>6} | {'airframe':<12} | {'method':<18}{'solved':>8}{'mean cost':>11}{'gap to teacher':>16}{'median s':>10}"]
     summary = {}
-    for r in args.radii:
-        teacher = np.array([results[r][i]["Teacher"][0] for i in test])
+    for r, a in conditions:
+        teacher = np.array([results[r, a][i]["Teacher"][0] for i in test])
         for m in ("Teacher", "VAE prior x64", "Physics latent GA"):
-            cost = np.array([results[r][i][m][0] for i in test])
+            cost = np.array([results[r, a][i][m][0] for i in test])
             both = np.isfinite(cost) & np.isfinite(teacher)
             row = {
                 "solved": float(np.isfinite(cost).mean()),
                 "mean_cost": float(np.nanmean(cost)) if np.isfinite(cost).any() else None,
                 "mean_gap": float(np.mean(cost[both] - teacher[both])) if both.any() else None,
-                "median_s": float(np.median([results[r][i][m][1] for i in test])),
+                "median_s": float(np.median([results[r, a][i][m][1] for i in test])),
             }
-            summary[f"{r:g} | {m}"] = row
+            summary[f"{r:g} | {a} | {m}"] = row
             label = ("strip" if args.strip else "none") if r <= 0 else f"{r:g} m"
             lines.append(
-                f"{label:>6} | {m:<18}{100 * row['solved']:>7.0f}%"
+                f"{label:>6} | {a:<12} | {m:<18}{100 * row['solved']:>7.0f}%"
                 f"{(row['mean_cost'] if row['mean_cost'] is not None else float('nan')):>11.2f}"
                 f"{(row['mean_gap'] if row['mean_gap'] is not None else float('nan')):>16.2f}{row['median_s']:>10.1f}"
             )

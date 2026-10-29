@@ -8,9 +8,11 @@
 #   bash slurm/submit_all.sh physics    # only the latent GA with the physics decoder
 #   bash slurm/submit_all.sh strip      # strip-theory wing: law -> shards -> merge -> physics,
 #                                       # in $WORK/phase3_strip
+#   bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 % on the strip comparison
+#                                       # (needs the strip dataset and command VAE in $WORK/phase3_strip)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if [ "${1:-all}" = "strip" ]; then
+if [ "${1:-all}" = "strip" ] || [ "${1:-all}" = "sensitivity" ]; then
     export STRIP=1 PHASE3_NAME=phase3_strip
 fi
 source slurm/config.sh
@@ -40,6 +42,17 @@ submit() {  # sbatch wrapper that prints and returns the job id
 }
 
 n_sizes=${#TRAIN_SIZES[@]}
+if [ "${1:-all}" = "sensitivity" ]; then
+    for f in dataset.npz theta.npy physics/command_vae_d16.pt; do
+        if [ ! -f "$data/$f" ]; then
+            echo "missing $data/$f: copy the strip dataset and its command VAE there first" >&2
+            exit 1
+        fi
+    done
+    sensitivity=$(submit "${cpu[@]}" --time="$TIME_SENSITIVITY" --output="$logs/%x-%j.out" slurm/sensitivity.sbatch)
+    echo "sensitivity: job $sensitivity (results in ${data}/sensitivity)"
+    exit 0
+fi
 if [ "${1:-all}" = "physics" ]; then
     physics=$(submit "${cpu[@]}" --time="$TIME_PHYSICS" --output="$logs/%x-%j.out" slurm/physics.sbatch)
     echo "physics decoder: job $physics (results in ${data}/physics)"
