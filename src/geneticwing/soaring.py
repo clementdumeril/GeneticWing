@@ -95,6 +95,9 @@ class SoaringScenario:
     brake_capacity: float = 0.05  # fraction of weight the airframe can shed (spoilers, slips)
     efficiency: float = 0.5  # propulsive efficiency
     ks_sharpness: float = 200.0  # KS aggregation of time-series constraints (conservative by log(N) / rho)
+    # A plan made in flight starts from the state reached (closed loop, geneticwing.closedloop):
+    initial_velocity: tuple[float, float, float] | None = None  # m/s, ground frame; None = level at `airspeed`
+    initial_acceleration: tuple[float, float, float] | None = None  # m/s^2; None = straight and steady
 
 
 @dataclass
@@ -142,12 +145,14 @@ class SoaringProblem:
         self.t = self.tau * sc.horizon
         self._bases = [self.spline.basis(self.tau, k) / sc.horizon**k for k in range(3)]
 
-        # Initial state: level flight at the given airspeed and heading, through the wind.
+        # Initial state: level flight at the given airspeed and heading, through the wind,
+        # unless the scenario gives the state reached in flight.
         h = np.radians(sc.heading_deg)
         v_air = sc.airspeed * np.array([np.sin(h), np.cos(h), 0.0])
         p0 = np.asarray(sc.start, dtype=float)
-        self.v0 = v_air + sc.wind(p0, 0.0)
-        self.fixed = self.spline.initial_control_points(p0, self.v0, np.zeros(3), sc.horizon)
+        self.v0 = v_air + sc.wind(p0, 0.0) if sc.initial_velocity is None else np.asarray(sc.initial_velocity, float)
+        a0 = np.zeros(3) if sc.initial_acceleration is None else np.asarray(sc.initial_acceleration, float)
+        self.fixed = self.spline.initial_control_points(p0, self.v0, a0, sc.horizon)
         self.n_free = sc.n_control - 3
         self.dim = 3 * self.n_free
         steps = np.diff(self.spline.greville) * sc.horizon

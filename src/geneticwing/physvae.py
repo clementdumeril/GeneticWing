@@ -79,11 +79,37 @@ def teacher_commands(genomes: np.ndarray, contexts: np.ndarray, cfg: SimConfig) 
 
 
 def fly(unit_commands: np.ndarray, context: np.ndarray, cfg: SimConfig, problem: SoaringProblem) -> Evaluation:
-    """Simulate unit-box command vectors in one situation's canonical frame and score the flights."""
+    """Simulate unit-box command vectors in one situation's canonical frame and score the flights.
+
+    Flights are scored up to the problem's horizon, which may be shorter than
+    the simulator's (a plan made in flight aims at the flight's end).
+    """
     t, p, v, a = simulate_flights(from_unit_commands(np.atleast_2d(unit_commands), cfg), context, cfg)
+    n = int(np.searchsorted(t, problem.scenario.horizon + 1e-9))
+    t, p, v, a = t[:n], p[:, :n], v[:, :n], a[:, :n]
     tt = np.broadcast_to(t, p.shape[:-1])
     sc = problem.scenario
     return problem.score(flat_state(sc.aircraft, tt, p, v, a, sc.wind(p, tt)), keep_state=True)
+
+
+def command_latent_plan(
+    vae: ConditionalVAE,
+    context: np.ndarray,
+    cfg: SimConfig,
+    problem: SoaringProblem,
+    budget: int,
+    rng: np.random.Generator,
+    seeds_z: np.ndarray | None = None,
+) -> tuple[Evaluation, np.ndarray]:
+    """GA over the command VAE's latent vector: the best flight (state kept, canonical frame) and its unit commands."""
+
+    def objective(x):
+        return fly(vae.decode(to_latent(x), context), context, cfg, problem).fitness
+
+    seeds = None if seeds_z is None else to_box(seeds_z)
+    search = RealGA(population=50).minimize(objective, vae.latent_dim, budget, rng, seeds)
+    commands = vae.decode(to_latent(search.x[None]), context)
+    return fly(commands, context, cfg, problem), commands[0]
 
 
 def command_latent_search(
@@ -104,13 +130,7 @@ def command_latent_search(
     of the final trajectory.
     """
     problem = SoaringProblem(canonical_scenario(context, **scenario_overrides))
-
-    def objective(x):
-        return fly(vae.decode(to_latent(x), context), context, cfg, problem).fitness
-
-    seeds = None if seeds_z is None else to_box(seeds_z)
-    search = RealGA(population=50).minimize(objective, vae.latent_dim, budget, rng, seeds)
-    best = fly(vae.decode(to_latent(search.x[None]), context), context, cfg, problem)
+    best, _ = command_latent_plan(vae, context, cfg, problem, budget, rng, seeds_z)
     fitness, cost, feasible = float(best.fitness[0]), float(best.cost[0]), bool(best.feasible[0])
     if nlp_budget:
         s = best.state
