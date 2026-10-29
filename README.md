@@ -193,6 +193,7 @@ All numbers here are on the same 77 held-out situations; the teacher averages
 | `scenarios/phase3_latent.py`, `phase3_physics.py` | The two latent-GA studies (round trip, prior samples, latent GA, improvement loop) |
 | `scenarios/phase3_realism.py` | The same turn limit (radius, or `--strip`) for the teacher and the latent GA |
 | `geneticwing.strip` | Strip-theory wing in a turn: inner-wing stall, aileron authority and drag |
+| `scenarios/phase3_unsolved.py` | Why the strip teacher leaves situations unsolved: violated constraints, other seeds |
 | `scenarios/report_figures.py` | The figures below, from the folder copied back from Savio |
 
 ### The student's scaling curve (H2)
@@ -329,6 +330,27 @@ to 100 % at -4.73, and the latent GA beats the teacher again, by 1.05 units at
 d = 16 (0.82 for the point mass on Savio). The test set is the situations the
 teacher solves, so the comparison says nothing about the other 40 %.
 
+Why the teacher fails (`phase3_unsolved.py`, 128 unsolved situations, 31 of
+them test ones): the family has a motor, so feasible trajectories always
+exist, and every failure is the optimizer's. In all 128 the NLP ends with the
+inner wing stalled (`wing_stall`), sometimes with `brake`, `cl` or `thrust_max`
+too. Retrying from other seeds, under the same margins:
+
+| Seed for the NLP | Feasible | Mean cost of those |
+| --- | --- | --- |
+| The law with a faster orbit (orbit-speed gene 0.8) | 52 % | -4.63 |
+| The straight glide | 40 % | +0.91 |
+| The law with a wider orbit (80 or 120 m) | 9-19 % | about +1 |
+| The same law, solved without the margins | 23-33 % | about -5.3 |
+| Any of them | 84 % | -2.76 (59 % with cost < 0) |
+
+The fix is a faster orbit, not a wider one: at a lower lift coefficient the
+slower inner wing keeps a stall margin, and those solutions harvest about as
+much as the teacher's usual ones. Wide circles and the straight glide are
+feasible but harvest nothing. Re-solving the teacher's own seed on another
+machine also rescues 3-19 % of the situations: SLSQP from the same start
+lands differently with numpy 2.2 on Windows and 2.5 on Linux.
+
 The seed law is tuned on the point-mass wing, also for `--strip` datasets.
 Tuned under the strip wing, the GA on the law's parameters converged to orbits
 the NLP could not repair: on 16 test situations, 3 feasible at +0.45 against
@@ -347,9 +369,9 @@ optimistic (on the 77 Savio situations: -3.73 with Euler, -3.57 with RK4).
 Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
-Next steps: the situations the teacher cannot solve under the strip wing
-(seeds that turn wider, or margins relaxed where the strip model is already
-conservative), then phase 4: closed-loop flight with turbulence and
+Next steps: a teacher that also seeds the NLP with the faster orbit, and the
+strip dataset regenerated with it; the sensitivity of the comparison to the
+SB-XC's estimated polar (`submit_all.sh sensitivity`); then phase 4: closed-loop flight with turbulence and
 wind-estimation errors (H5).
 
 ## Usage
@@ -394,6 +416,7 @@ bash slurm/submit_all.sh train # later: retrain only, on the merged dataset
 bash slurm/submit_all.sh latent    # latent GA (position VAE)
 bash slurm/submit_all.sh physics   # latent GA with the physics decoder
 bash slurm/submit_all.sh strip     # strip wing: teacher re-solved, then the physics decoder (phase3_strip/)
+bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 %, on the strip comparison (dataset and VAE copied to phase3_strip/)
 ```
 
 Results land in `/global/scratch/users/$USER/geneticwing/phase3/students/n_<size>/`
