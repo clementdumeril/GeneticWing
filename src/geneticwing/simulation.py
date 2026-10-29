@@ -44,6 +44,8 @@ class TrackerConfig:
     bank_rate_max_deg: float = 60.0  # deg/s
     bank_max_deg: float = 45.0
     powered: bool = False
+    thrust_max: float | None = None  # N, motor limit when powered; None = the aircraft's max_thrust
+    cl_max_fraction: float = 1.0  # angle-of-attack protection: C_L commands capped at this fraction of C_L max
     search_window: int = 50  # reference samples scanned ahead of the last match
 
 
@@ -97,10 +99,16 @@ def simulate_tracking(
     config: TrackerConfig = TrackerConfig(),
     dt: float = 0.01,
     max_duration: float | None = None,
+    initial_attitude: tuple[float, float] | None = None,
+    extra_drag=None,
 ) -> FlatState:
     """Fly ``reference`` (a densely sampled plan) until its end point is passed.
 
-    Commands are updated at ``1 / dt`` Hz and held over each RK4 step.
+    Commands are updated at ``1 / dt`` Hz and held over each RK4 step. The
+    attitude loops start from ``initial_attitude`` (C_L, bank in rad), or from
+    the reference's first sample; a replanning loop passes the attitude the
+    previous segment ended with. ``extra_drag(airspeed, bank, cl)`` (N) adds a
+    drag the point mass does not have, e.g. the aileron drag of a strip wing.
     """
     max_duration = 2.0 * float(reference.t[-1]) if max_duration is None else max_duration
     steps = int(round(max_duration / dt))
@@ -116,6 +124,9 @@ def simulate_tracking(
     end_tangent = reference.velocity[last] / np.linalg.norm(reference.velocity[last])
 
     idx, cl, bank = 0, float(reference.cl[0]), float(reference.bank[0])
+    if initial_attitude is not None:
+        cl, bank = (float(x) for x in initial_attitude)
+    thrust_max = aircraft.max_thrust if config.thrust_max is None else config.thrust_max
     k = 0
     for k in range(steps + 1):
         t = k * dt
@@ -136,10 +147,12 @@ def simulate_tracking(
             + (config.k_z * (p_r[2] - p[k, 2]) + config.k_speed * (airspeed - reference.airspeed[idx])) * _UP
         )
         c = flat_state(aircraft, t, p[k], v[k], a_c, w)
-        cl += alpha * (np.clip(float(c.cl), 0.0, aircraft.cl_max) - cl)
+        cl += alpha * (np.clip(float(c.cl), 0.0, config.cl_max_fraction * aircraft.cl_max) - cl)
         bank_step = alpha * (np.clip(float(c.bank), -bank_max, bank_max) - bank)
         bank += np.clip(bank_step, -bank_rate_max * dt, bank_rate_max * dt)
-        thrust = np.clip(float(c.thrust_required), 0.0, aircraft.max_thrust) if config.powered else 0.0
+        thrust = np.clip(float(c.thrust_required), 0.0, thrust_max) if config.powered else 0.0
+        if extra_drag is not None:
+            thrust -= float(extra_drag(airspeed, bank, cl))
 
         def accel(pos, vel, time, cl=cl, bank=bank, thrust=thrust):
             return aerodynamic_acceleration(aircraft, vel - wind(pos, time), cl, bank, thrust)

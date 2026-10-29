@@ -194,6 +194,8 @@ All numbers here are on the same 77 held-out situations; the teacher averages
 | `scenarios/phase3_realism.py` | The same turn limit (radius, or `--strip`) for the teacher and the latent GA |
 | `geneticwing.strip` | Strip-theory wing in a turn: inner-wing stall, aileron authority and drag |
 | `scenarios/phase3_unsolved.py` | Why the strip teacher leaves situations unsolved: violated constraints, other seeds |
+| `geneticwing.closedloop` | Phase 4: plans flown in turbulence with a wrong belief, replanned from the state reached |
+| `scenarios/phase4_closed_loop.py` | The planners in closed loop: open loop against replanning, four conditions of the air |
 | `scenarios/report_figures.py` | The figures below, from the folder copied back from Savio |
 
 ### The student's scaling curve (H2)
@@ -431,8 +433,47 @@ Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
 Next steps: the 17 % of situations the two-seed teacher still leaves unsolved;
-a command decoder conditioned on wing loading and C_L max; then phase 4: closed-loop flight with turbulence and
+a command decoder conditioned on wing loading and C_L max; phase 4 below: closed-loop flight with turbulence and
 wind-estimation errors (H5).
+
+## Phase 4: closed loop
+
+Phase 3 scores every planner in the air it planned in. `geneticwing.closedloop`
+separates the two: the **air** is the S1 situation with the strip wing, plus
+Dryden turbulence; the planner only has a **belief** of the thermal's centre and
+strength and of the wind, each off by a sampled error. The path tracker of
+`geneticwing.simulation` flies the plan in the real air, with an autopilot's
+limits: attitude lag, bank-rate limit, motor, C_L protection at 90 % of C_L max,
+bank under 40 deg, and the strip wing's aileron drag. The flight is scored like
+a plan, in the real air, and `stall_flags` says whether a wing section went
+beyond its stall.
+
+Each method flies 60 s either open loop (planned once) or replanned every 10 s
+(MPC). Replanning only helps if it costs nothing when the belief is right, so a
+plan made in flight:
+
+* aims at the energy at the end of the flight (shrinking horizon); scored 60 s
+  ahead, every plan puts its gain at the end of its window, and replanning every
+  10 s pushes that gain away for ever (on one situation: -3.47 replanned against
+  -7.11 open loop, with the first 10 s of every plan flown as predicted);
+* starts from the state reached (velocity, acceleration, C_L, bank, thrust),
+  keeps the orbit direction already taken, is warm-started from the rest of the
+  plan being flown, and has that rest as a candidate.
+
+Conditions: `calm` (tracking losses only), `turbulence` (W20 = 7.5 m/s, light),
+`estimate` (thermal centre off by 15 m per axis, w* by 20 %, wind by 0.5 m/s
+per axis; the thermal core is about 30 m in radius at 250 m) and `both`. In one
+condition every method flies the same gusts and the same wrong belief.
+
+```bash
+python scenarios/phase4_closed_loop.py --data D/dataset.npz --theta D/theta.npy --vae D/physics/command_vae_d16.pt
+bash slurm/submit_all.sh closedloop   # on Savio, on the strip run (phase3_strip_v2)
+```
+
+First runs on two situations (small budgets) show replanning at least as good
+as the open loop in calm air for every method, and the inner wing's stall as
+the failure in turbulence or with a wrong belief. The belief is never updated
+yet: replanning absorbs tracking errors but keeps circling the wrong centre.
 
 ## Usage
 

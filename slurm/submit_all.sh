@@ -9,12 +9,17 @@
 #   bash slurm/submit_all.sh strip      # strip-theory wing: law -> shards -> merge -> physics,
 #                                       # in $WORK/phase3_strip (or $PHASE3_NAME)
 #   bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 % on the strip comparison
+#   bash slurm/submit_all.sh closedloop   # phase 4: closed loop, turbulence, wrong belief
+#                                       # (on the Savio strip run, $WORK/phase3_strip_v2)
 #                                       # (needs the strip dataset and command VAE in $WORK/phase3_strip)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ "${1:-all}" = "strip" ] || [ "${1:-all}" = "sensitivity" ]; then
     # Another folder keeps an earlier strip run:  PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh strip
     export STRIP=1 PHASE3_NAME=${PHASE3_NAME:-phase3_strip}
+fi
+if [ "${1:-all}" = "closedloop" ]; then
+    export STRIP=1 PHASE3_NAME=${PHASE3_NAME:-phase3_strip_v2}
 fi
 source slurm/config.sh
 
@@ -43,15 +48,20 @@ submit() {  # sbatch wrapper that prints and returns the job id
 }
 
 n_sizes=${#TRAIN_SIZES[@]}
-if [ "${1:-all}" = "sensitivity" ]; then
+if [ "${1:-all}" = "sensitivity" ] || [ "${1:-all}" = "closedloop" ]; then
     for f in dataset.npz theta.npy physics/command_vae_d16.pt; do
         if [ ! -f "$data/$f" ]; then
             echo "missing $data/$f: copy the strip dataset and its command VAE there first" >&2
             exit 1
         fi
     done
-    sensitivity=$(submit "${cpu[@]}" --time="$TIME_SENSITIVITY" --output="$logs/%x-%j.out" slurm/sensitivity.sbatch)
-    echo "sensitivity: job $sensitivity (results in ${data}/sensitivity)"
+    if [ "$1" = "closedloop" ]; then
+        job=$(submit "${cpu[@]}" --time="$TIME_CLOSEDLOOP" --output="$logs/%x-%j.out" slurm/closedloop.sbatch)
+        echo "closed loop: job $job (results in ${data}/closedloop)"
+    else
+        job=$(submit "${cpu[@]}" --time="$TIME_SENSITIVITY" --output="$logs/%x-%j.out" slurm/sensitivity.sbatch)
+        echo "sensitivity: job $job (results in ${data}/sensitivity)"
+    fi
     exit 0
 fi
 if [ "${1:-all}" = "physics" ]; then

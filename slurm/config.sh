@@ -78,3 +78,7 @@ TIME_PHYSICS="04:00:00"
 # them, and the teacher and the physics latent GA both fly the variant.
 SENSITIVITY_AIRFRAMES=(nominal cd0:0.8 cd0:1.2 cl_max:0.8 cl_max:1.2 mass:0.8 mass:1.2)
 TIME_SENSITIVITY="02:00:00"
+
+# --- Closed loop (bash slurm/submit_all.sh closedloop) -------------------------
+# 65 situations x 4 conditions x 6 methods; the teacher replanned every 10 s dominates.
+TIME_CLOSEDLOOP="04:00:00"
