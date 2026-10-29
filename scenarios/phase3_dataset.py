@@ -16,7 +16,7 @@ repair (3 instances of 16 feasible against 13 of 16, test costs +0.45 against
 -5.41). Under the strip wing every orbit direction is also seeded with a
 faster orbit, and the better of the two solutions is kept: the teacher's
 failures all end with the inner wing stalled, and a faster orbit (lower lift
-coefficient) rescues half of them (``phase3_unsolved.py``).
+coefficient) rescues half of them (``phase3_unsolved.py``; ``geneticwing.policies.law_seeds``).
 
 Run, whole dataset at once: ``python scenarios/phase3_dataset.py --train 600 --test 80``
 (writes ``results/phase3/dataset.npz``). On a cluster, in shards sharing one law:
@@ -42,7 +42,7 @@ import numpy as np  # noqa: E402
 
 from geneticwing.benchmarks import heading_frame_context, s1_family, with_margins  # noqa: E402
 from geneticwing.planning.local import solve_local  # noqa: E402
-from geneticwing.policies import simulate_law, tune_law  # noqa: E402
+from geneticwing.policies import law_seeds, seed_theta, simulate_law, tune_law  # noqa: E402
 from geneticwing.seeding import fit_genome  # noqa: E402
 from geneticwing.soaring import SoaringProblem  # noqa: E402
 from geneticwing.strip import sbxc_wing  # noqa: E402
@@ -50,13 +50,6 @@ from geneticwing.strip import sbxc_wing  # noqa: E402
 LAW_TRAINING = tuple(range(90_000, 90_004))
 LAW_BUDGET = 1_200
 NLP_BUDGET = 6_000
-DIRECTION_GENE = 6  # > 0.5 is counter-clockwise
-ORBIT_SPEED_GENE, FAST_ORBIT = 1, 0.8  # about 1.37 times the min-drag speed
-
-
-def law_seeds(strip: bool) -> tuple[dict, ...]:
-    """Overrides of the law's genes, one NLP seed each (per orbit direction)."""
-    return ({}, {ORBIT_SPEED_GENE: FAST_ORBIT}) if strip else ({},)
 
 
 def _family(instance: int, strip: bool):
@@ -73,11 +66,7 @@ def solve_instance(job):
     for ccw in (True, False):
         best = None
         for k, overrides in enumerate(law_seeds(strip)):
-            th = np.array(theta)
-            th[DIRECTION_GENE] = 0.75 if ccw else 0.25
-            for gene, value in overrides.items():
-                th[gene] = value
-            law = simulate_law(robust, th[None])
+            law = simulate_law(robust, seed_theta(theta, ccw, overrides)[None])
             if k == 0:  # the tuned law's own flight, for the "law alone" statistic
                 law_cost, law_feasible = float(law.cost[0]), bool(law.feasible[0])
             genome = fit_genome(robust, law.state.t[0], law.state.position[0])

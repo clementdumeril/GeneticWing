@@ -41,6 +41,27 @@ from geneticwing.wind.ridge import RidgeLift
 from geneticwing.wind.thermal import Thermal
 
 N_PARAMS = 10
+ORBIT_SPEED_GENE, DIRECTION_GENE = 1, 6  # see decode(); direction > 0.5 is counter-clockwise
+FAST_ORBIT = 0.8  # orbit-speed gene: about 1.37 times the min-drag speed
+
+
+def law_seeds(strip: bool) -> tuple[dict[int, float], ...]:
+    """Gene overrides of a tuned law, one NLP seed each (per orbit direction).
+
+    Under the strip wing the teacher's NLP fails with the inner wing stalled;
+    a faster orbit (lower lift coefficient) keeps a stall margin there, so it
+    seeds the NLP as well. On the point-mass wing the tuned law alone.
+    """
+    return ({}, {ORBIT_SPEED_GENE: FAST_ORBIT}) if strip else ({},)
+
+
+def seed_theta(theta: np.ndarray, ccw: bool, overrides: dict[int, float]) -> np.ndarray:
+    """The law's parameters for one orbit direction and one seed of ``law_seeds``."""
+    th = np.array(theta, dtype=float)
+    th[DIRECTION_GENE] = 0.75 if ccw else 0.25
+    for gene, value in overrides.items():
+        th[gene] = value
+    return th
 
 
 @dataclass(frozen=True)
