@@ -305,6 +305,36 @@ trajectories, whose best circles are now forbidden, while the NLP adapts to
 the new constraint directly. The fix is in the data: regenerate the teacher's
 dataset with the strip wing and retrain the command VAE on it.
 
+### Strip wing, retrained
+
+The teacher re-solved 3,080 situations (ids 1000-3999 for training, 600-679
+for test) with the strip wing: 2,833 solutions, 2,757 for training. Run on
+three desktop machines in about 1 h 15 (`--strip` shards, then
+`phase3_merge.py`), followed by `phase3_physics.py --strip --margins` with
+latent sizes 8, 16 and 32.
+
+The strip wing removes many situations: about 40 % of them have no
+trajectory feasible under the teacher's margins in either direction (2 % for
+the point mass). The test set keeps the 49 situations of 80 the teacher solves.
+
+| Method (49 test situations) | d = 8 | d = 16 | d = 32 |
+| --- | --- | --- | --- |
+| Teacher | -4.97 | -4.97 | -4.97 |
+| 64 prior samples of the command VAE (solved) | -4.73 (100 %) | -4.73 (100 %) | -4.72 (100 %) |
+| Physics latent GA | -5.70 | -5.99 | -5.89 |
+| Physics latent GA + NLP | -5.71 | **-6.02** | -5.89 |
+
+Trained on strip-wing trajectories, the prior goes from 66 % solved at -1.23
+to 100 % at -4.73, and the latent GA beats the teacher again, by 1.05 units at
+d = 16 (0.82 for the point mass on Savio). The test set is the situations the
+teacher solves, so the comparison says nothing about the other 40 %.
+
+The seed law is tuned on the point-mass wing, also for `--strip` datasets.
+Tuned under the strip wing, the GA on the law's parameters converged to orbits
+the NLP could not repair: on 16 test situations, 3 feasible at +0.45 against
+13 feasible at -5.41 with the point-mass law. The first strip run used that
+law and was discarded.
+
 ### Integration note (RK4)
 
 The first simulators used explicit Euler steps. Lift turns the velocity, and
@@ -317,9 +347,10 @@ optimistic (on the 77 Savio situations: -3.73 with Euler, -3.57 with RK4).
 Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
-Next steps: regenerate the teacher's dataset with the strip wing (Savio),
-retrain the command VAE on it and rerun the comparison, then phase 4:
-closed-loop flight with turbulence and wind-estimation errors (H5).
+Next steps: the situations the teacher cannot solve under the strip wing
+(seeds that turn wider, or margins relaxed where the strip model is already
+conservative), then phase 4: closed-loop flight with turbulence and
+wind-estimation errors (H5).
 
 ## Usage
 

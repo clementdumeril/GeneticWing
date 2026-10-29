@@ -10,7 +10,10 @@ The teacher solves with tightened constraints (``with_margins``) and its
 solutions are scored under the nominal ones: optimal solutions on their
 active constraints break under the slightest imitation error. With
 ``--strip``, every problem carries the strip-theory wing (inner-wing stall,
-ailerons, aileron drag).
+ailerons, aileron drag). The law is still tuned without it: it only seeds
+the NLP, and tuned under the strip wing it converges to orbits the NLP cannot
+repair (3 instances of 16 feasible against 13 of 16, test costs +0.45 against
+-5.41).
 
 Run, whole dataset at once: ``python scenarios/phase3_dataset.py --train 600 --test 80``
 (writes ``results/phase3/dataset.npz``). On a cluster, in shards sharing one law:
@@ -80,8 +83,9 @@ def solve_instance(job):
     return instance, (context, heading_frame_context(scenario)), solutions
 
 
-def tune_family_law(budget: int, strip: bool = False) -> tuple[np.ndarray, float]:
-    train_problems = [SoaringProblem(_family(i, strip)[0]) for i in LAW_TRAINING]
+def tune_family_law(budget: int) -> tuple[np.ndarray, float]:
+    """Tune the seed law on the point-mass wing, also for ``--strip`` datasets."""
+    train_problems = [SoaringProblem(_family(i, strip=False)[0]) for i in LAW_TRAINING]
     return tune_law(train_problems, budget, np.random.default_rng(3))
 
 
@@ -147,7 +151,7 @@ def main() -> None:
         theta = np.load(args.theta)
         print(f"law loaded from {args.theta}", flush=True)
     else:
-        theta, f = tune_family_law(args.law_budget, args.strip)
+        theta, f = tune_family_law(args.law_budget)
         print(f"[{time.perf_counter() - start:5.0f}s] law tuned on the family, mean fitness {f:.2f}", flush=True)
     if args.tune_law_only:
         np.save(args.out / "theta.npy", theta)
