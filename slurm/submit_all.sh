@@ -10,6 +10,7 @@
 #                                       # in $WORK/phase3_strip (or $PHASE3_NAME)
 #   bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 % on the strip comparison
 #   bash slurm/submit_all.sh closedloop   # phase 4: closed loop, turbulence, wrong belief
+#   bash slurm/submit_all.sh xc           # phase 5: 20 km cross-country, circling rule vs planned climbs
 #                                       # (on the Savio strip run, $WORK/phase3_strip_v2)
 #                                       # (needs the strip dataset and command VAE in $WORK/phase3_strip)
 set -euo pipefail
@@ -18,7 +19,7 @@ if [ "${1:-all}" = "strip" ] || [ "${1:-all}" = "sensitivity" ]; then
     # Another folder keeps an earlier strip run:  PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh strip
     export STRIP=1 PHASE3_NAME=${PHASE3_NAME:-phase3_strip}
 fi
-if [ "${1:-all}" = "closedloop" ]; then
+if [ "${1:-all}" = "closedloop" ] || [ "${1:-all}" = "xc" ]; then
     export STRIP=1 PHASE3_NAME=${PHASE3_NAME:-phase3_strip_v2}
 fi
 source slurm/config.sh
@@ -48,14 +49,17 @@ submit() {  # sbatch wrapper that prints and returns the job id
 }
 
 n_sizes=${#TRAIN_SIZES[@]}
-if [ "${1:-all}" = "sensitivity" ] || [ "${1:-all}" = "closedloop" ]; then
+if [ "${1:-all}" = "sensitivity" ] || [ "${1:-all}" = "closedloop" ] || [ "${1:-all}" = "xc" ]; then
     for f in dataset.npz theta.npy physics/command_vae_d16.pt; do
         if [ ! -f "$data/$f" ]; then
             echo "missing $data/$f: copy the strip dataset and its command VAE there first" >&2
             exit 1
         fi
     done
-    if [ "$1" = "closedloop" ]; then
+    if [ "$1" = "xc" ]; then
+        job=$(submit "${cpu[@]}" --time="$TIME_XC" --output="$logs/%x-%j.out" slurm/crosscountry.sbatch)
+        echo "cross-country: job $job (results in ${data}/crosscountry)"
+    elif [ "$1" = "closedloop" ]; then
         job=$(submit "${cpu[@]}" --time="$TIME_CLOSEDLOOP" --output="$logs/%x-%j.out" slurm/closedloop.sbatch)
         echo "closed loop: job $job (results in ${data}/closedloop)"
     else

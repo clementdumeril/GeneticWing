@@ -1,0 +1,330 @@
+<title>GeneticWing 20 km</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: task strip on top, 3D corridor with the instrument panel beside it, timeline and barogram under; stacks on phones. */
+:root {
+  --bg: #eef2f4; --surface: #ffffff; --ink: #14212b; --muted: #586a77; --line: #cdd6dd;
+  --scene: #e2eaf0; --grid: #b7c4ce; --glide: #2f6db0; --climb: #17936a; --motor: #c9502f; --final: #7b4fb0;
+  --thermal: #e39a2d; --chip: #e4eaee; --other: #8fa1ae;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642;
+    --scene: #0f1a23; --grid: #2c3c48; --glide: #6ea6e4; --climb: #39c58c; --motor: #ee7857; --final: #b48ae6;
+    --thermal: #f0b24c; --chip: #1d2a35; --other: #5d6f7c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642;
+  --scene: #0f1a23; --grid: #2c3c48; --glide: #6ea6e4; --climb: #39c58c; --motor: #ee7857; --final: #b48ae6;
+  --thermal: #f0b24c; --chip: #1d2a35; --other: #5d6f7c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); margin: 0; }
+.wrap { max-width: 1360px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 28px; display: grid; gap: 16px; }
+header { display: grid; gap: 6px; }
+h1 { font: 700 clamp(26px, 3.4vw, 36px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 78ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { font: 500 14px/1.2 var(--body); color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; cursor: pointer; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--glide); outline-offset: 2px; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
+.scene { position: relative; background: var(--scene); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; height: min(66vh, 620px); min-height: 340px; }
+.scene canvas { display: block; width: 100%; height: 100%; }
+.overlay { position: absolute; display: grid; gap: 4px; font-size: 12px; color: var(--muted); background: color-mix(in srgb, var(--surface) 84%, transparent); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); }
+.legend { left: 12px; top: 10px; }
+.legend span { display: flex; align-items: center; gap: 7px; }
+.sw { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
+.view { right: 10px; top: 10px; min-width: 200px; }
+.view label { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.view input[type=range] { grid-column: 1 / -1; accent-color: var(--glide); }
+.view button { font: 500 13px var(--body); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; cursor: pointer; }
+.view button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.hint { position: absolute; left: 12px; bottom: 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
+aside { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 14px; }
+aside h2 { font: 600 13px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.ro { display: grid; gap: 1px; min-width: 0; }
+.ro .k { font-size: 12px; color: var(--muted); }
+.ro .v { font: 500 19px/1.15 var(--mono); font-variant-numeric: tabular-nums; }
+.ro .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.phase { font: 600 14px var(--body); padding: 3px 10px; border-radius: 999px; color: var(--bg); justify-self: start; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: right; padding: 4px 0 4px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+th { font-weight: 500; color: var(--muted); }
+td { font-family: var(--mono); }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.controls > button { font: 600 14px/1 var(--body); background: var(--ink); color: var(--bg); border: 0; border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+.controls select { font: 14px var(--body); background: var(--chip); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; }
+.controls input[type=range] { flex: 1 1 240px; min-width: 0; accent-color: var(--glide); }
+.clock { font: 500 15px var(--mono); font-variant-numeric: tabular-nums; min-width: 7ch; text-align: right; }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 6px; display: grid; gap: 4px; }
+.chart canvas { width: 100%; height: 170px; display: block; }
+.cap { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); }
+.cap i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } .scene { height: 58vh; } .view { min-width: 0; } }
+@media (max-width: 420px) { .wrap { padding-inline: 16px; } .ro .v { font-size: 17px; } .legend { display: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>GeneticWing 20 km</h1>
+    <p class="lede" id="lede">Le SB-XC doit rejoindre un but à 20 km en enchaînant les thermiques, avec le moins de batterie possible.
+      Le même tacticien (MacCready) choisit les thermiques ; seule change la façon de monter dedans : la spirale classique, ou notre GA.</p>
+    <div class="chips" id="flights" role="group" aria-label="Vol affiché"></div>
+  </header>
+
+  <div class="main">
+    <div class="scene" id="scene">
+      <div class="overlay legend" aria-hidden="true">
+        <span><i class="sw" style="background:var(--glide)"></i>transition entre thermiques</span>
+        <span><i class="sw" style="background:var(--climb)"></i>montée dans un thermique</span>
+        <span><i class="sw" style="background:var(--final)"></i>plané final vers le but</span>
+        <span><i class="sw" style="background:var(--motor)"></i>moteur</span>
+        <span><i class="sw" style="background:var(--thermal);height:10px;width:10px;border-radius:50%"></i>thermique (plus opaque = plus fort)</span>
+      </div>
+      <div class="overlay view">
+        <label for="exag">Exagération verticale <b id="exag-v">×8</b><input id="exag" type="range" min="1" max="20" step="1" value="8"></label>
+        <label for="tscale">Largeur des thermiques <b id="tscale-v">×4</b><input id="tscale" type="range" min="1" max="10" step="1" value="4"></label>
+        <button id="follow" type="button" aria-pressed="false">Suivre l'avion</button>
+      </div>
+      <div class="hint">Glisser : tourner · Molette : zoom · Clic droit : déplacer</div>
+    </div>
+
+    <aside aria-live="polite">
+      <h2>Instruments</h2>
+      <span class="phase" id="r-phase">–</span>
+      <div class="readouts">
+        <div class="ro"><span class="k">Temps de vol</span><span class="v" id="r-time">–</span></div>
+        <div class="ro"><span class="k">Distance au but</span><span class="v" id="r-goal">–</span></div>
+        <div class="ro"><span class="k">Altitude</span><span class="v" id="r-alt">–</span></div>
+        <div class="ro"><span class="k">Vario</span><span class="v" id="r-vz">–</span></div>
+        <div class="ro"><span class="k">Vitesse air</span><span class="v" id="r-va">–</span></div>
+        <div class="ro"><span class="k">Batterie dépensée</span><span class="v" id="r-bat">–</span></div>
+      </div>
+      <h2>Bilan des deux vols</h2>
+      <table id="summary"></table>
+      <p class="note" id="climbs"></p>
+    </aside>
+  </div>
+
+  <div class="controls">
+    <button id="play" type="button">Lecture</button>
+    <input id="time" type="range" min="0" max="3000" step="1" value="3000" aria-label="Temps du vol">
+    <span class="clock" id="clock">–</span>
+    <label for="speed" class="note">Vitesse</label>
+    <select id="speed"><option value="10">×10</option><option value="30" selected>×30</option><option value="100">×100</option></select>
+  </div>
+
+  <div class="chart">
+    <div class="cap" id="cap"></div>
+    <canvas id="chart" aria-label="Barogramme : altitude selon la distance parcourue vers le but"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const DATA = /*XC_JSON*/null;
+
+(function () {
+  const sceneEl = document.getElementById("scene");
+  if (!DATA || !window.THREE) { sceneEl.innerHTML = '<div class="empty">Aucune donnée : génère la page avec scenarios/phase5_view.py.</div>'; return; }
+  const $ = id => document.getElementById(id);
+  const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = (x, d = 1) => x.toFixed(d).replace(".", ",").replace("-", "−");
+  const clock = s => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, "0")} s`;
+  const PHASES = [["Transition", "--glide"], ["Montée", "--climb"], ["Moteur", "--motor"], ["Plané final", "--final"]];
+  const task = DATA.task, flights = DATA.flights;
+  let exag = 8, tscale = 4;
+  const W = (x, y, z) => new THREE.Vector3(x, z * exag, -y);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  sceneEl.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 10, 200000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(5000, 20000, 8000); scene.add(sun);
+
+  const xs = flights.flatMap(f => f.p.map(p => p[0])).concat([task.start[0], task.goal[0]]);
+  const ys = flights.flatMap(f => f.p.map(p => p[1])).concat([task.start[1], task.goal[1]]);
+  const x0 = Math.min(...xs) - 800, x1 = Math.max(...xs) + 800, y0 = Math.min(...ys) - 800, y1 = Math.max(...ys) + 800;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+
+  let world = new THREE.Group(); scene.add(world);
+  let active = 0, compare = true, t = 0, playing = false, follow = false, last = null;
+  const T_END = Math.max(...flights.map(f => f.t[f.t.length - 1]));
+  let paths = [], plane = null, thermalMeshes = [];
+
+  function phaseColor(m) { return new THREE.Color(tok(PHASES[m][1])); }
+
+  function build() {
+    scene.remove(world); world.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    world = new THREE.Group(); scene.add(world);
+    scene.background = new THREE.Color(tok("--scene"));
+    // Ground grid, 1 km squares.
+    const size = Math.ceil(Math.max(x1 - x0, y1 - y0) / 1000) * 1000;
+    const grid = new THREE.GridHelper(size, size / 1000, new THREE.Color(tok("--grid")), new THREE.Color(tok("--grid")));
+    grid.position.set(cx, 0, -cy); world.add(grid);
+    // Floor and ceiling as faint planes over the corridor.
+    [[task.z_floor, "--motor", 0.05], [task.z_ceiling, "--glide", 0.04]].forEach(([z, c, o]) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), new THREE.MeshBasicMaterial({ color: new THREE.Color(tok(c)), transparent: true, opacity: o, side: THREE.DoubleSide, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.position.set(cx, z * exag, -cy); world.add(m);
+    });
+    // Start and goal.
+    const goal = new THREE.Mesh(new THREE.CylinderGeometry(task.goal_radius * 3, task.goal_radius * 3, task.z_ceiling * exag, 32, 1, true),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(tok("--final")), transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+    goal.position.set(task.goal[0], task.z_ceiling * exag / 2, -task.goal[1]); world.add(goal);
+    const start = new THREE.Mesh(new THREE.SphereGeometry(80, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(tok("--ink")) }));
+    start.position.copy(W(task.start[0], task.start[1], task.start[2])); world.add(start);
+    // Thermals: columns from the ground to the cloud base, drawn wider than life (tscale).
+    thermalMeshes = DATA.thermals.map(th => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(th.r * tscale, th.r * tscale, task.z_ceiling * exag, 24, 1, true),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(tok("--thermal")), transparent: true, opacity: 0.06 + 0.12 * (th.w - 1.2) / 1.6, side: THREE.DoubleSide, depthWrite: false }));
+      m.userData = th; world.add(m); return m;
+    });
+    // Paths coloured by flight phase; the other flight drawn faint for comparison.
+    paths = flights.map((f, i) => {
+      const g = new THREE.BufferGeometry().setFromPoints(f.p.map(p => W(p[0], p[1], p[2])));
+      const col = []; f.mode.forEach(m => { const c = phaseColor(m); col.push(c.r, c.g, c.b); });
+      g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+      const trail = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true }));
+      const full = new THREE.Line(g.clone(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.2 }));
+      const shadow = new THREE.Line(new THREE.BufferGeometry().setFromPoints(f.p.map(p => W(p[0], p[1], 0.5 / exag))),
+        new THREE.LineBasicMaterial({ color: new THREE.Color(tok("--other")), transparent: true, opacity: 0.45 }));
+      world.add(trail, full, shadow);
+      return { trail, full, shadow };
+    });
+    plane = new THREE.Mesh(new THREE.ConeGeometry(45, 160, 12), new THREE.MeshLambertMaterial({ color: new THREE.Color(tok("--ink")) }));
+    world.add(plane);
+    show();
+  }
+
+  function show() {
+    paths.forEach((p, i) => {
+      const on = i === active;
+      p.trail.visible = on; p.shadow.visible = on;
+      p.full.visible = on || compare;
+      p.full.material.opacity = on ? 0.2 : 0.35;
+    });
+    setTime(t);
+  }
+
+  function indexAt(f, s) { let lo = 0, hi = f.t.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (f.t[m] <= s) lo = m; else hi = m - 1; } return lo; }
+
+  function setTime(s) {
+    t = Math.max(0, Math.min(s, T_END));
+    const f = flights[active], i = indexAt(f, t), p = f.p[i];
+    paths[active].trail.geometry.setDrawRange(0, i + 1);
+    plane.position.copy(W(p[0], p[1], p[2]));
+    const j = Math.min(i + 1, f.p.length - 1), q = f.p[j];
+    const dir = W(q[0], q[1], q[2]).sub(W(p[0], p[1], p[2]));
+    if (dir.lengthSq() > 1e-6) plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+    thermalMeshes.forEach(m => { const th = m.userData; m.position.set(th.c[0] + th.d[0] * t, task.z_ceiling * exag / 2, -(th.c[1] + th.d[1] * t)); });
+    const m = f.mode[i], ph = PHASES[m];
+    const pe = $("r-phase"); pe.textContent = ph[0] + (m === 1 && f.target[i] >= 0 ? ` (thermique ${f.target[i]})` : ""); pe.style.background = tok(ph[1]);
+    $("r-time").innerHTML = clock(t);
+    $("r-goal").innerHTML = `${fmt(f.to_goal[i] / 1000, 2)} <small>km</small>`;
+    $("r-alt").innerHTML = `${fmt(p[2], 0)} <small>m</small>`;
+    $("r-vz").innerHTML = `${f.vz[i] >= 0 ? "+" : ""}${fmt(f.vz[i], 1)} <small>m/s</small>`;
+    $("r-va").innerHTML = `${fmt(f.airspeed[i], 1)} <small>m/s</small>`;
+    $("r-bat").innerHTML = `${fmt(f.battery[i], 1)} <small>kJ</small>`;
+    $("time").value = t; $("clock").textContent = clock(t);
+    if (follow) controls.target.copy(plane.position);
+    drawChart();
+  }
+
+  function summary() {
+    const cols = flights.map(f => f.label.split(" (")[0]);
+    const row = (k, fn) => `<tr><td>${k}</td>${flights.map(f => `<td>${fn(f)}</td>`).join("")}</tr>`;
+    const rate = f => f.climbs.length ? fmt(f.climbs.reduce((a, c) => a + (c.z1 - c.z0) / Math.max(c.t1 - c.t0, 1), 0) / f.climbs.length, 2) + " m/s" : "–";
+    $("summary").innerHTML = `<tr><th></th>${cols.map(c => `<th>${c}</th>`).join("")}</tr>` +
+      row("Durée", f => clock(f.duration).replace(" s", "s").replace(" min ", "′")) +
+      row("Vitesse", f => fmt(f.speed_kmh, 1) + " km/h") +
+      row("Batterie", f => fmt(f.battery_kj, 1) + " kJ") +
+      row("Score", f => fmt(f.cost, 2)) +
+      row("Montées", f => f.climbs.length) +
+      row("Montée moyenne", rate) +
+      row("Limites", f => f.violated.length ? (f.stalled ? "décrochage" : "marge entamée") : "ok");
+    const f = flights[active];
+    $("climbs").textContent = "Montées de ce vol : " + (f.climbs.map(c => `${fmt(c.z0, 0)} → ${fmt(c.z1, 0)} m en ${Math.round(c.t1 - c.t0)} s (${fmt((c.z1 - c.z0) / Math.max(c.t1 - c.t0, 1), 2)} m/s)`).join(" ; ") || "aucune") + ".";
+  }
+
+  // Barogram: altitude against the distance made good toward the goal, both flights.
+  const chart = $("chart");
+  function drawChart() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), w = chart.clientWidth, h = chart.clientHeight;
+    chart.width = w * dpr; chart.height = h * dpr;
+    const c = chart.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+    const pad = { l: 46, r: 10, t: 8, b: 20 }, D = task.distance, zMax = Math.ceil((task.z_ceiling + 60) / 100) * 100;
+    const X = d => pad.l + d / D * (w - pad.l - pad.r), Y = z => pad.t + (1 - z / zMax) * (h - pad.t - pad.b);
+    c.font = "11px " + tok("--mono"); c.fillStyle = tok("--muted"); c.strokeStyle = tok("--line"); c.lineWidth = 1;
+    for (let z = 0; z <= zMax; z += 200) { c.beginPath(); c.moveTo(pad.l, Y(z)); c.lineTo(w - pad.r, Y(z)); c.stroke(); c.fillText(z + " m", 2, Y(z) + 4); }
+    for (let d = 0; d <= D; d += 5000) c.fillText(d / 1000 + " km", X(d) - 10, h - 5);
+    [[task.z_floor, "--motor"], [task.z_ceiling, "--glide"]].forEach(([z, k]) => { c.setLineDash([4, 4]); c.strokeStyle = tok(k); c.beginPath(); c.moveTo(pad.l, Y(z)); c.lineTo(w - pad.r, Y(z)); c.stroke(); c.setLineDash([]); });
+    flights.forEach((f, k) => {
+      const on = k === active;
+      if (!on && !compare) return;
+      c.lineWidth = on ? 2 : 1.2;
+      for (let i = 1; i < f.t.length; i++) {
+        c.strokeStyle = on ? tok(PHASES[f.mode[i]][1]) : tok("--other");
+        c.beginPath(); c.moveTo(X(D - f.to_goal[i - 1]), Y(f.p[i - 1][2])); c.lineTo(X(D - f.to_goal[i]), Y(f.p[i][2])); c.stroke();
+      }
+      const i = indexAt(f, t);
+      c.fillStyle = on ? tok("--ink") : tok("--other");
+      c.beginPath(); c.arc(X(D - f.to_goal[i]), Y(f.p[i][2]), on ? 4.5 : 3.5, 0, 2 * Math.PI); c.fill();
+    });
+    $("cap").innerHTML = `<span><i style="background:var(--ink)"></i>${flights[active].label}</span>` + (compare ? `<span><i style="background:var(--other)"></i>${flights[1 - active].label}</span>` : "") +
+      `<span>Barogramme : altitude selon la distance parcourue vers le but · plancher moteur et plafond en pointillés</span>`;
+  }
+
+  function tick(now) {
+    if (playing) {
+      if (last !== null) { const s = t + (now - last) / 1000 * Number($("speed").value); if (s >= T_END) { setTime(T_END); playing = false; $("play").textContent = "Lecture"; } else setTime(s); }
+      last = now;
+    }
+    controls.update(); renderer.render(scene, camera); requestAnimationFrame(tick);
+  }
+  function resize() { const w = sceneEl.clientWidth, h = sceneEl.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); drawChart(); }
+
+  // Controls.
+  const box = $("flights");
+  const options = flights.map((f, i) => ({ label: f.label, act: () => { active = i; compare = false; } }))
+    .concat([{ label: "Les deux superposés", act: () => { compare = true; } }]);
+  options.forEach((o, k) => {
+    const b = document.createElement("button"); b.type = "button"; b.id = "view-" + k; b.textContent = o.label;
+    b.addEventListener("click", () => { o.act(); box.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); summary(); show(); });
+    box.appendChild(b);
+  });
+  $("view-" + flights.length).setAttribute("aria-pressed", "true");
+  $("play").addEventListener("click", () => { playing = !playing; last = null; $("play").textContent = playing ? "Pause" : "Lecture"; if (playing && t >= T_END - 0.5) setTime(0); });
+  $("time").max = Math.ceil(T_END);
+  $("time").addEventListener("input", e => { playing = false; $("play").textContent = "Lecture"; setTime(Number(e.target.value)); });
+  $("exag").addEventListener("input", e => { exag = Number(e.target.value); $("exag-v").textContent = "×" + exag; build(); });
+  $("tscale").addEventListener("input", e => { tscale = Number(e.target.value); $("tscale-v").textContent = "×" + tscale; build(); });
+  $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (!follow) controls.target.set(cx, 250 * exag, -cy); else camera.position.copy(plane.position.clone().add(new THREE.Vector3(-1500, 1500, 1500))); });
+  window.addEventListener("resize", resize);
+  const retheme = () => { build(); summary(); };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  $("lede").textContent += ` Tâche ${task.name.replace("XC ", "")}, ${DATA.thermals.length} thermiques, vent ${fmt(Math.hypot(...task.wind), 1)} m/s. Les thermiques sont dessinés plus larges que nature et l'altitude est exagérée (réglables).`;
+  camera.position.set(cx - 9000, 9000, -(cy - 9000));
+  controls.target.set(cx, 250 * exag, -cy);
+  t = T_END;
+  build(); summary(); resize(); setTime(T_END);
+  requestAnimationFrame(tick);
+})();
+</script>
