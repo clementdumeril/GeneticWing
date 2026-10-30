@@ -101,6 +101,7 @@ def simulate_tracking(
     max_duration: float | None = None,
     initial_attitude: tuple[float, float] | None = None,
     extra_drag=None,
+    cl_limit=None,
 ) -> FlatState:
     """Fly ``reference`` (a densely sampled plan) until its end point is passed.
 
@@ -108,7 +109,9 @@ def simulate_tracking(
     attitude loops start from ``initial_attitude`` (C_L, bank in rad), or from
     the reference's first sample; a replanning loop passes the attitude the
     previous segment ended with. ``extra_drag(airspeed, bank, cl)`` (N) adds a
-    drag the point mass does not have, e.g. the aileron drag of a strip wing.
+    drag the point mass does not have, e.g. the aileron drag of a strip wing,
+    and ``cl_limit(airspeed, bank, cl)`` caps the C_L command further, e.g. to
+    keep a strip wing's inner sections from stalling.
     """
     max_duration = 2.0 * float(reference.t[-1]) if max_duration is None else max_duration
     steps = int(round(max_duration / dt))
@@ -147,9 +150,14 @@ def simulate_tracking(
             + (config.k_z * (p_r[2] - p[k, 2]) + config.k_speed * (airspeed - reference.airspeed[idx])) * _UP
         )
         c = flat_state(aircraft, t, p[k], v[k], a_c, w)
-        cl += alpha * (np.clip(float(c.cl), 0.0, config.cl_max_fraction * aircraft.cl_max) - cl)
+        target = float(np.clip(float(c.cl), 0.0, config.cl_max_fraction * aircraft.cl_max))
+        if cl_limit is not None:
+            target = float(cl_limit(airspeed, bank, target))
+        cl += alpha * (target - cl)
         bank_step = alpha * (np.clip(float(c.bank), -bank_max, bank_max) - bank)
         bank += np.clip(bank_step, -bank_rate_max * dt, bank_rate_max * dt)
+        if cl_limit is not None:  # the limiter also acts on the lagged C_L, at the bank just reached
+            cl = min(cl, float(cl_limit(airspeed, bank, cl)))
         thrust = np.clip(float(c.thrust_required), 0.0, thrust_max) if config.powered else 0.0
         if extra_drag is not None:
             thrust -= float(extra_drag(airspeed, bank, cl))

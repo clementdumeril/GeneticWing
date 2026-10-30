@@ -128,3 +128,17 @@ def minimum_turn_radius(
 def sbxc_wing(**kwargs) -> StripWing:
     """SB-XC: 1.07 m^2, aspect ratio 19.8 (Model Aviation, 1992); taper and ailerons estimated."""
     return StripWing.trapezoid(area=1656 * 0.0254**2, aspect_ratio=19.8, taper=0.5, **kwargs)
+
+
+def protected_cl(wing: StripWing, aircraft: Aircraft, airspeed: float, bank: float, cl: float, fraction: float = 0.9) -> float:
+    """The largest C_L, up to ``cl``, that keeps every wing section below ``fraction`` of its stall.
+
+    An autopilot's angle-of-attack protection works on the mean C_L; in a slow
+    turn the inner wing works harder than the mean, so the cap shrinks with
+    bank and with low airspeed. The ratio of the local peak to the mean C_L is
+    taken at ``cl`` (it hardly depends on it).
+    """
+    if cl <= 0.0:
+        return cl
+    peak = float(turn_loads(wing, aircraft, airspeed, bank, cl).cl_max_local)
+    return min(cl, fraction * wing.local_cl_max * cl / max(peak, 1e-9))
