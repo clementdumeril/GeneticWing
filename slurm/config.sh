@@ -82,3 +82,9 @@ TIME_SENSITIVITY="02:00:00"
 # --- Closed loop (bash slurm/submit_all.sh closedloop) -------------------------
 # 65 situations x 4 conditions x 6 methods; the teacher replanned every 10 s dominates.
 TIME_CLOSEDLOOP="04:00:00"
+
+# --- Cross-country (bash slurm/submit_all.sh xc) --------------------------------
+# 20 km tasks x 6 pilots; the planned climbs (GA, prior) dominate the time.
+XC_TASKS=64
+XC_SEARCH_BUDGET=1000            # GA flights per 60 s climb block
+TIME_XC="04:00:00"

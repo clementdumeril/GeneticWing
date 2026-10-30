@@ -196,6 +196,9 @@ All numbers here are on the same 77 held-out situations; the teacher averages
 | `scenarios/phase3_unsolved.py` | Why the strip teacher leaves situations unsolved: violated constraints, other seeds |
 | `geneticwing.closedloop` | Phase 4: plans flown in turbulence with a wrong belief, replanned from the state reached |
 | `scenarios/phase4_closed_loop.py` | The planners in closed loop: open loop against replanning, four conditions of the air |
+| `geneticwing.crosscountry` | Phase 5: 20 km tasks through a thermal field, MacCready tactician, planned climbs |
+| `scenarios/phase5_crosscountry.py` | The cross-country benchmark: circling rule against GA and prior climbs |
+| `scenarios/phase4_view.py`, `scenarios/phase5_view.py` | Self-contained 3D pages of flights (`docs/viewer/`) |
 | `scenarios/report_figures.py` | The figures below, from the folder copied back from Savio |
 
 ### The student's scaling curve (H2)
@@ -474,6 +477,39 @@ First runs on two situations (small budgets) show replanning at least as good
 as the open loop in calm air for every method, and the inner wing's stall as
 the failure in turbulence or with a wrong belief. The belief is never updated
 yet: replanning absorbs tracking errors but keeps circling the wrong centre.
+
+## Phase 5: cross-country
+
+`geneticwing.crosscountry` sends the SB-XC to a goal 20 km away through a
+Poisson field of drifting thermals (about one per km^2 over a 2 km corridor;
+`ThermalField` evaluates them all at once). The pilot has two levels. The
+MacCready tactician picks the reachable thermal with the best rate of progress
+toward the goal, counting the time to climb back the height the glide costs,
+leaves it once the climb falls below the MacCready setting or at the cloud base
+(600 m), and starts the final glide when it is safe. The flying level glides at
+the speed-to-fly, circles, and uses the motor only below 120 m. Score: battery
+spent minus the energy stored on arrival, over the battery of the same
+distance on the motor (the motor scores about 1).
+
+`PlannedClimbPilot` keeps the tactician and hands every climb to a phase 3-4
+planner, in 60 s blocks flown by the closed loop and cut at the cloud base;
+with `motor_in_climbs=False` the climbs are pure soaring, so only the circling
+is compared.
+
+First runs (four 20 km tasks): the MacCready pilot at 0.5 flies every task on
+no battery at 22-27 km/h (the motor: 61-69 kJ at 25-29 km/h); a higher setting
+skips the weaker thermals and ends on the motor. On one task, the latent GA
+climbs each of the four thermals 8-29 % faster than the circling rule (1.80,
+1.95, 1.20, 1.24 m/s against 1.43, 1.51, 1.08, 1.16), still on no battery,
+but it brushes the inner wing's stall. Left with the motor, the GA used it in
+its climbs (the S1 problems allow it), and the prior alone fails above the
+180-320 m it was trained on.
+
+```bash
+python scenarios/phase5_crosscountry.py --vae D/physics/command_vae_d16.pt --tasks 64
+python scenarios/phase5_view.py --vae D/physics/command_vae_d16.pt   # 3D page of one task, both pilots
+bash slurm/submit_all.sh xc   # on Savio, with the strip run's command VAE
+```
 
 ## Usage
 
