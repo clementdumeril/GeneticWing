@@ -8,4 +8,4 @@ set -euo pipefail
 source slurm/common.sh
 
 run python scenarios/phase5_crosscountry.py --vae "$DATA/physics/command_vae_d16.pt" --tasks "$XC_TASKS" \
-    --search-budget "$XC_SEARCH_BUDGET" --out "$DATA/crosscountry" --workers "$CORES"
+    --search-budget "$XC_SEARCH_BUDGET" --out "$DATA/${XC_OUT:-crosscountry}" --workers "$CORES"

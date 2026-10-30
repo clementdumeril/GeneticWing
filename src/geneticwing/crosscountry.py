@@ -37,7 +37,7 @@ from geneticwing.benchmarks import MOTOR_THRUST
 from geneticwing.flatness import FlatState, flat_state
 from geneticwing.simulation import aerodynamic_acceleration, rk4_step
 from geneticwing.soaring import GoalMission, LoiterMission, SoaringProblem, SoaringScenario
-from geneticwing.strip import StripWing, sbxc_wing, turn_loads
+from geneticwing.strip import StripWing, protected_cl, sbxc_wing, turn_loads
 from geneticwing.wind.base import CompositeWind, UniformWind, WindField
 from geneticwing.wind.thermal import _GAUSSIAN_DISK_MEAN, Thermal
 
@@ -158,6 +158,7 @@ class Autopilot:
     bank_rate_max_deg: float = 60.0
     bank_max_deg: float = 40.0
     cl_max_fraction: float = 0.9  # angle-of-attack protection
+    inner_wing_protection: float | None = None  # with a strip wing: every section kept below this fraction of its stall
     k_vertical: float = 1.0  # 1/s, vertical speed loop
     k_energy: float = 0.5  # vertical speed traded per m/s of airspeed error
     k_speed: float = 0.3  # 1/s, along-track acceleration per m/s of airspeed error, on the motor
@@ -421,8 +422,13 @@ def fly_xc(task: XCTask, pilot: MacCreadyPilot, dt: float = 0.1, autopilot: Auto
         w = air(p, t)
         g = pilot.guidance(task, t, p, v, w)
         c_cl, c_bank, thrust, airspeed = _flat_commands(ac, t, p, v, w, g, autopilot, task)
-        cl += alpha * (np.clip(c_cl, 0.0, autopilot.cl_max_fraction * ac.cl_max) - cl)
+        target = float(np.clip(c_cl, 0.0, autopilot.cl_max_fraction * ac.cl_max))
+        if task.strip_wing is not None and autopilot.inner_wing_protection is not None:
+            target = protected_cl(task.strip_wing, ac, airspeed, bank, target, autopilot.inner_wing_protection)
+        cl += alpha * (target - cl)
         bank += np.clip(alpha * (np.clip(c_bank, -bank_max, bank_max) - bank), -bank_rate, bank_rate)
+        if task.strip_wing is not None and autopilot.inner_wing_protection is not None:
+            cl = protected_cl(task.strip_wing, ac, airspeed, bank, cl, autopilot.inner_wing_protection)
         if task.strip_wing is not None:
             thrust -= float(turn_loads(task.strip_wing, ac, airspeed, bank, cl).extra_drag)
 
@@ -478,6 +484,7 @@ class PlannedClimbPilot(MacCreadyPilot):
     replan_every: float | None = None
     seed: int = 0
     motor_in_climbs: bool = True  # False: the climbs are pure soaring (give the planner a motorless simulator too)
+    inner_wing_protection: float | None = None  # the climbs' autopilot protects the inner wing (see Autopilot)
 
     def reset(self):
         super().reset()
@@ -498,7 +505,8 @@ class PlannedClimbPilot(MacCreadyPilot):
             thrust_max=task.thrust_max if self.motor_in_climbs else 0.0, n_control=32, strip_wing=task.strip_wing,
         )
         span = min(self.block, task.time_limit - t)
-        loop = LoopConfig(duration=max(span, 1.0), replan_every=self.replan_every)
+        loop = LoopConfig(duration=max(span, 1.0), replan_every=self.replan_every,
+                          inner_wing_protection=self.inner_wing_protection)
         if not self.motor_in_climbs:
             loop = replace(loop, tracker=replace(loop.tracker, powered=False))
         return fly_closed_loop(situation, Shifted(task.air, t), exact_belief(situation), self.planner, loop, self.rng,

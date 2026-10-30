@@ -58,7 +58,7 @@ if [ "${1:-all}" = "sensitivity" ] || [ "${1:-all}" = "closedloop" ] || [ "${1:-
     done
     if [ "$1" = "xc" ]; then
         job=$(submit "${cpu[@]}" --time="$TIME_XC" --output="$logs/%x-%j.out" slurm/crosscountry.sbatch)
-        echo "cross-country: job $job (results in ${data}/crosscountry)"
+        echo "cross-country: job $job (results in ${data}/${XC_OUT})"
     elif [ "$1" = "closedloop" ]; then
         job=$(submit "${cpu[@]}" --time="$TIME_CLOSEDLOOP" --output="$logs/%x-%j.out" slurm/closedloop.sbatch)
         echo "closed loop: job $job (results in ${data}/closedloop)"

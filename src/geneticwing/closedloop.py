@@ -44,7 +44,7 @@ from geneticwing.policies import law_seeds, seed_theta, simulate_law
 from geneticwing.seeding import fit_genome
 from geneticwing.simulation import TrackerConfig, simulate_tracking
 from geneticwing.soaring import Evaluation, SoaringProblem, SoaringScenario
-from geneticwing.strip import turn_loads
+from geneticwing.strip import protected_cl, turn_loads
 from geneticwing.wind.base import UniformWind, WindField
 from geneticwing.wind.thermal import Thermal
 from geneticwing.wind.turbulence import DrydenTurbulence
@@ -230,7 +230,16 @@ class _FirstKnot:
 
 
 class _CommandPlanner:
-    """Shared by the command-VAE planners: canonical frame in, world frame out, warm start in flight."""
+    """Shared by the command-VAE planners: canonical frame in, world frame out, warm start in flight.
+
+    With ``cl_margin`` the plans are searched and scored with that C_L margin
+    (fraction of C_L max, for the mean and for every strip-wing section)
+    instead of the scenario's: room for tracking errors and gusts. The
+    teacher's full margins (``with_margins``) leave no feasible circling in a
+    motorless strip-wing climb, so only the stall margin is tightened.
+    """
+
+    cl_margin: float | None = None
 
     def __init__(self, vae, cfg):
         self.vae, self.cfg = vae, cfg
@@ -240,6 +249,8 @@ class _CommandPlanner:
         cfg = replace(self.cfg, initial_airspeed=scenario.airspeed)
         canonical = canonical_scenario(context, airspeed=scenario.airspeed, strip_wing=scenario.strip_wing,
                                        aircraft=scenario.aircraft, horizon=scenario.horizon)
+        if self.cl_margin is not None:
+            canonical = replace(canonical, cl_margin=self.cl_margin)
         return context, cfg, SoaringProblem(canonical)
 
     def _in_flight(self, start: Start | None, context: np.ndarray, cfg):
@@ -268,9 +279,9 @@ class _CommandPlanner:
 class LatentPlanner(_CommandPlanner):
     """The GA over the command VAE's latent vector (``budget`` flights per plan)."""
 
-    def __init__(self, vae, cfg, budget: int = 3_000):
+    def __init__(self, vae, cfg, budget: int = 3_000, cl_margin: float | None = None):
         super().__init__(vae, cfg)
-        self.budget = budget
+        self.budget, self.cl_margin = budget, cl_margin
 
     def __call__(self, scenario: SoaringScenario, rng: np.random.Generator, start: Start | None = None) -> Plan:
         from geneticwing.physvae import command_latent_plan, fly
@@ -291,9 +302,9 @@ class LatentPlanner(_CommandPlanner):
 class PriorPlanner(_CommandPlanner):
     """The best of ``samples`` prior samples of the command VAE, flown in the belief: no search."""
 
-    def __init__(self, vae, cfg, samples: int = 64):
+    def __init__(self, vae, cfg, samples: int = 64, cl_margin: float | None = None):
         super().__init__(vae, cfg)
-        self.samples = samples
+        self.samples, self.cl_margin = samples, cl_margin
 
     def __call__(self, scenario: SoaringScenario, rng: np.random.Generator, start: Start | None = None) -> Plan:
         from geneticwing.physvae import fly
@@ -318,6 +329,7 @@ class LoopConfig:
     # The autopilot: motor, angle-of-attack protection at the nominal C_L margin, bank kept under the 45 deg limit.
     tracker: TrackerConfig = field(default_factory=lambda: TrackerConfig(
         powered=True, thrust_max=MOTOR_THRUST, cl_max_fraction=0.9, bank_max_deg=40.0))
+    inner_wing_protection: float | None = None  # with a strip wing: keep every section below this fraction of its stall
 
 
 @dataclass
@@ -377,6 +389,9 @@ def fly_closed_loop(
         start = Start(attitude[0], attitude[1], float(initial[4]))
     wing = situation.strip_wing
     extra_drag = None if wing is None else (lambda va, bank, cl: turn_loads(wing, ac, va, bank, cl).extra_drag)
+    cl_limit = None
+    if wing is not None and config.inner_wing_protection is not None:
+        cl_limit = lambda va, bank, cl: protected_cl(wing, ac, va, bank, cl, config.inner_wing_protection)  # noqa: E731
     t0, pieces, plans, seconds = 0.0, [], [], []
     while config.duration - t0 > 2.0 * config.dt:
         tic = time.perf_counter()
@@ -386,7 +401,8 @@ def fly_closed_loop(
         plans.append(plan)
         span = left if config.replan_every is None else min(config.replan_every, left)
         seg = simulate_tracking(ac, plan.reference, Shifted(air, t0), p, v, config.tracker, dt=config.dt,
-                                max_duration=span, initial_attitude=attitude, extra_drag=extra_drag)
+                                max_duration=span, initial_attitude=attitude, extra_drag=extra_drag,
+                                cl_limit=cl_limit)
         pieces.append((seg, t0))
         p, v, a = seg.position[-1], seg.velocity[-1], seg.acceleration[-1]
         attitude = (float(seg.cl[-1]), float(seg.bank[-1]))

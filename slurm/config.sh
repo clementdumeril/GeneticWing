@@ -84,7 +84,9 @@ TIME_SENSITIVITY="02:00:00"
 TIME_CLOSEDLOOP="04:00:00"
 
 # --- Cross-country (bash slurm/submit_all.sh xc) --------------------------------
-# 20 km tasks x 6 pilots; the planned climbs (GA, prior) dominate the time.
+# 20 km tasks x 7 pilots (motor, circling rule, GA climbs, safe GA climbs); the planned climbs dominate.
+# Results in $WORK/phase3_strip_v2/$XC_OUT (XC_OUT=crosscountry_safe keeps the first run).
 XC_TASKS=64
 XC_SEARCH_BUDGET=1000            # GA flights per 60 s climb block
+XC_OUT=${XC_OUT:-crosscountry}
 TIME_XC="04:00:00"

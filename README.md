@@ -496,14 +496,34 @@ planner, in 60 s blocks flown by the closed loop and cut at the cloud base;
 with `motor_in_climbs=False` the climbs are pure soaring, so only the circling
 is compared.
 
-First runs (four 20 km tasks): the MacCready pilot at 0.5 flies every task on
-no battery at 22-27 km/h (the motor: 61-69 kJ at 25-29 km/h); a higher setting
-skips the weaker thermals and ends on the motor. On one task, the latent GA
-climbs each of the four thermals 8-29 % faster than the circling rule (1.80,
-1.95, 1.20, 1.24 m/s against 1.43, 1.51, 1.08, 1.16), still on no battery,
-but it brushes the inner wing's stall. Left with the motor, the GA used it in
-its climbs (the S1 problems allow it), and the prior alone fails above the
-180-320 m it was trained on.
+Savio, 64 tasks of 20 km, every pilot on the same tasks (GA: 1,000 flights
+per 60 s block, motor off in its climbs):
+
+| Pilot | Arrived | Battery | Speed | Mean climb | Flights without stall |
+| --- | --- | --- | --- | --- | --- |
+| Motor all the way | 100 % | 61.9 kJ | 29.2 km/h | - | 100 % |
+| Circling rule, MacCready 0.5 | 92 % | 2.9 kJ | 24.9 km/h | 1.29 m/s | 100 % |
+| Circling rule, MacCready 1 | 97 % | 19.3 kJ | 28.3 km/h | 1.22 m/s | 100 % |
+| **GA climbs, MacCready 0.5** | 97 % | 3.0 kJ | **28.4 km/h** | **2.09 m/s** | 81 % |
+| **GA climbs, MacCready 1** | 97 % | 4.7 kJ | **29.5 km/h** | **2.07 m/s** | 31 % |
+| Prior climbs, MacCready 0.5 | 91 % | 15.1 kJ | 24.6 km/h | 0.84 m/s | 45 % |
+
+The latent GA climbs 60 % faster than the circling rule. At the same setting
+that makes the flight 3.4 km/h faster on the same battery (faster on 91 % of the
+tasks); at MacCready 1 it is as fast as the motor with 13 times less battery,
+where the circling rule falls back on the motor. The prior alone fails above
+the 180-320 m it was trained on. The catch is safety: the GA's circles sit at
+the inner wing's limit, and 19 to 69 % of its flights stall a section.
+
+Safety belongs in the autopilot rather than in the plan. `protected_cl`
+(`geneticwing.strip`) caps the C_L command so that no wing section passes 90 %
+of its stall, also after the attitude lag (`inner_wing_protection` in the
+tracker, the closed loop and the cross-country autopilot). On three 10 km
+tasks, the GA climbs then stay 35 % faster than the circling rule (1.72 against
+1.27 m/s) with no stall and no violation, while a GA searched with a 20 % stall
+margin climbs at 0.86 m/s: margins in the plan cost the climb, a limiter in the
+autopilot does not. `XC_OUT=crosscountry_safe bash slurm/submit_all.sh xc`
+reruns the 64 tasks with the protected autopilot for every pilot.
 
 ```bash
 python scenarios/phase5_crosscountry.py --vae D/physics/command_vae_d16.pt --tasks 64
