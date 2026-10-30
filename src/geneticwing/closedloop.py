@@ -356,8 +356,14 @@ def fly_closed_loop(
     planner,
     config: LoopConfig = LoopConfig(),
     rng: np.random.Generator | None = None,
+    initial: tuple[np.ndarray, np.ndarray, float, float, float] | None = None,
 ) -> Flight:
-    """Fly ``situation`` in ``air`` for ``config.duration`` seconds, replanning in ``belief``."""
+    """Fly ``situation`` in ``air`` for ``config.duration`` seconds, replanning in ``belief``.
+
+    ``initial = (velocity, acceleration, C_L, bank, thrust)`` starts the flight from
+    a state reached in flight (a cross-country climb) instead of level flight;
+    the first plan then starts from it too.
+    """
     rng = np.random.default_rng(0) if rng is None else rng
     ac = situation.aircraft
     thrust_max = config.tracker.thrust_max if config.tracker.thrust_max is not None else ac.max_thrust
@@ -365,6 +371,10 @@ def fly_closed_loop(
     h = np.radians(situation.heading_deg)
     v = situation.airspeed * np.array([np.sin(h), np.cos(h), 0.0]) + air(p, 0.0)
     a, start, attitude = None, None, None
+    if initial is not None:
+        v, a = np.asarray(initial[0], dtype=float), np.asarray(initial[1], dtype=float)
+        attitude = (float(initial[2]), float(initial[3]))
+        start = Start(attitude[0], attitude[1], float(initial[4]))
     wing = situation.strip_wing
     extra_drag = None if wing is None else (lambda va, bank, cl: turn_loads(wing, ac, va, bank, cl).extra_drag)
     t0, pieces, plans, seconds = 0.0, [], [], []
