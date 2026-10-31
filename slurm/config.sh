@@ -90,3 +90,9 @@ XC_TASKS=64
 XC_SEARCH_BUDGET=1000            # GA flights per 60 s climb block
 XC_OUT=${XC_OUT:-crosscountry}
 TIME_XC="04:00:00"
+
+# --- Distillation of the latent GA (bash slurm/submit_all.sh distill) ----------
+# The GA solves DISTILL_TRAIN training situations (about 13 s each), a flow
+# matching model learns its solutions, then the test comparison.
+DISTILL_TRAIN=3000
+TIME_DISTILL="02:00:00"
