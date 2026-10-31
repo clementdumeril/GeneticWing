@@ -515,15 +515,30 @@ where the circling rule falls back on the motor. The prior alone fails above
 the 180-320 m it was trained on. The catch is safety: the GA's circles sit at
 the inner wing's limit, and 19 to 69 % of its flights stall a section.
 
-Safety belongs in the autopilot rather than in the plan. `protected_cl`
-(`geneticwing.strip`) caps the C_L command so that no wing section passes 90 %
-of its stall, also after the attitude lag (`inner_wing_protection` in the
-tracker, the closed loop and the cross-country autopilot). On three 10 km
-tasks, the GA climbs then stay 35 % faster than the circling rule (1.72 against
-1.27 m/s) with no stall and no violation, while a GA searched with a 20 % stall
-margin climbs at 0.86 m/s: margins in the plan cost the climb, a limiter in the
-autopilot does not. `XC_OUT=crosscountry_safe bash slurm/submit_all.sh xc`
-reruns the 64 tasks with the protected autopilot for every pilot.
+Safety belongs in the autopilot. `protected_cl` (`geneticwing.strip`) caps
+the C_L command so that no wing section passes 90 % of its stall, also after
+the attitude lag (`inner_wing_protection` in the tracker, the closed loop and
+the cross-country autopilot). Rerun on the same 64 tasks with that autopilot
+for every pilot (`XC_OUT=crosscountry_safe bash slurm/submit_all.sh xc`):
+
+| Pilot (protected autopilot) | Battery | Speed | Mean climb | Flights stalled | Without violation |
+| --- | --- | --- | --- | --- | --- |
+| Circling rule, MacCready 0.5 | 2.9 kJ | 24.9 km/h | 1.29 m/s | 0 % | 100 % |
+| Circling rule, MacCready 1 | 19.3 kJ | 28.3 km/h | 1.22 m/s | 0 % | 100 % |
+| **GA climbs, MacCready 0.5** | 2.9 kJ | **28.2 km/h** | **2.08 m/s** | **0 %** | 98 % |
+| **GA climbs, MacCready 1** | 4.7 kJ | **29.5 km/h** | **2.07 m/s** | **0 %** | 100 % |
+| GA climbs with a 20 % stall margin, MacCready 0.5 | 2.9 kJ | 27.6 km/h | 1.95 m/s | 0 % | 100 % |
+| GA climbs with a 20 % stall margin, MacCready 1 | 4.7 kJ | 29.0 km/h | 1.90 m/s | 0 % | 100 % |
+
+The limiter removes every stall and leaves the GA's lead intact (2.08 against
+2.09 m/s, 28.2 against 28.4 km/h without it): the faster climbs did not come
+from flying at the stall. Paired on the same tasks, the GA climbs are faster
+than the circling rule on 89 % of them at MacCready 0.5 (+3.3 km/h, same
+battery), and at MacCready 1 they match the motor's speed on 4.7 kJ, against
+19.3 kJ for the circling rule (better on 73 % of the tasks). A stall margin in
+the plan is also safe but costs 6-8 % of the climb. (On three 10 km tasks with
+a third of the GA budget, the margin had looked much costlier, 0.86 m/s: too
+few searches to find the safe circles.)
 
 ```bash
 python scenarios/phase5_crosscountry.py --vae D/physics/command_vae_d16.pt --tasks 64
