@@ -17,7 +17,11 @@ C. on the dataset's test situations, against the teacher, compare:
 
 Every candidate is decoded into commands and flown by the simulator, with the
 teacher's margins and the strip wing, as in ``phase3_physics.py --strip --margins``.
-Stage A is cached in ``<out>/ga_train.npz``: a rerun only retrains and re-evaluates.
+Stage A is cached in ``<out>/ga_train.npz``: a rerun only retrains and re-evaluates
+(``--cache-from`` reuses another run's). ``--inflight`` adds the GA's climb plans
+recorded in flight (``phase5_crosscountry.py --record``), DAgger-style: the
+generator then also sees the aircraft's state (bank, airspeed, C_L;
+``closedloop.state_features``), level flight for the situations of stage A.
 
 Run: ``python scenarios/phase6_distill.py --data D/dataset.npz --vae D/physics/command_vae_d16.pt --out D/distill``
 """
@@ -39,6 +43,7 @@ import torch  # noqa: E402
 
 from geneticwing.aircraft import SBXC_APPROX  # noqa: E402
 from geneticwing.benchmarks import MOTOR_THRUST, canonical_scenario  # noqa: E402
+from geneticwing.closedloop import state_features  # noqa: E402
 from geneticwing.evolution import RealGA  # noqa: E402
 from geneticwing.latent import ConditionalVAE, to_latent  # noqa: E402
 from geneticwing.physvae import fly  # noqa: E402
@@ -63,7 +68,8 @@ def _init_worker(vae_state, flow_state, cfg):
     vae.load(vae_state)
     flow = None
     if flow_state is not None:
-        flow = FlowMatchingStudent.from_state(flow_state, c["latent_dim"], 6, cfg["flow_width"], cfg["flow_depth"])
+        flow = FlowMatchingStudent.from_state(flow_state, c["latent_dim"], flow_state.get("context_dim", 6),
+                                              cfg["flow_width"], cfg["flow_depth"])
     _W.update(vae=vae, flow=flow, cfg=cfg, sim=_sim())
 
 
@@ -82,6 +88,13 @@ def _search(context, problem, budget, rng, seeds_box):
                                             _W["vae"].latent_dim, budget, rng, seeds_box)
     ev = _fly_box(result.x[None], context, problem)
     return np.asarray(result.x), ev
+
+
+def _condition(context):
+    """The generator's input: the context, and the level-flight state when it was distilled in flight too."""
+    if _W["flow"].context_dim == len(context):
+        return context
+    return np.concatenate([context, state_features(canonical_scenario(context), None)])
 
 
 def _row(ev, k, seconds):
@@ -108,15 +121,16 @@ def evaluate_test(job):
     out["VAE prior x64"] = _row(ev, int(np.argmin(ev.fitness)), time.perf_counter() - t0)
 
     t0 = time.perf_counter()
-    ev = _fly_box(flow.sample(context, 1, rng=rng), context, problem)
+    condition = _condition(context)
+    ev = _fly_box(flow.sample(condition, 1, rng=rng), context, problem)
     out["distilled x1"] = _row(ev, 0, time.perf_counter() - t0)
 
     t0 = time.perf_counter()
-    ev = _fly_box(flow.sample(context, 64, rng=rng), context, problem)
+    ev = _fly_box(flow.sample(condition, 64, rng=rng), context, problem)
     out["distilled x64"] = _row(ev, int(np.argmin(ev.fitness)), time.perf_counter() - t0)
 
     t0 = time.perf_counter()
-    _, ev = _search(context, problem, cfg["short_budget"], np.random.default_rng(instance), flow.sample(context, 8, rng=rng))
+    _, ev = _search(context, problem, cfg["short_budget"], np.random.default_rng(instance), flow.sample(condition, 8, rng=rng))
     out[f"distilled + GA {cfg['short_budget']}"] = _row(ev, 0, time.perf_counter() - t0)
 
     t0 = time.perf_counter()
@@ -137,6 +151,9 @@ def main() -> None:
     parser.add_argument("--flow-width", type=int, default=256)
     parser.add_argument("--flow-depth", type=int, default=3)
     parser.add_argument("--max-test", type=int)
+    parser.add_argument("--cache-from", type=Path, help="ga_train.npz of an earlier run (skips stage A)")
+    parser.add_argument("--inflight", type=Path, nargs="*", default=[],
+                        help="ga_inflight.npz files recorded in flight by phase5_crosscountry.py --record")
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--depth", type=int, default=3)
     parser.add_argument("--workers", type=int, default=os.cpu_count())
@@ -160,7 +177,7 @@ def main() -> None:
            "flow_width": args.flow_width, "flow_depth": args.flow_depth}
 
     # A. The GA on the training situations (cached).
-    cache = args.out / "ga_train.npz"
+    cache = args.cache_from or args.out / "ga_train.npz"
     if cache.exists():
         a = np.load(cache)
         xs, fits, costs, done = a["x"], a["fitness"], a["cost"], a["instance"]
@@ -185,10 +202,20 @@ def main() -> None:
 
     # B. Distill: flow matching from context to the GA's best point.
     contexts = np.array([first[("train", int(i))] for i in done])
-    flow = FlowMatchingStudent(latent_dim, 6, args.flow_width, args.flow_depth, device=args.device)
-    tlog = flow.fit(xs[feasible], contexts[feasible], steps=args.steps)
-    log(f"B. flow matching trained on {feasible.sum()} GA solutions: {tlog.seconds:.0f}s, final loss {np.mean(tlog.losses[-200:]):.3f}")
-    flow_state = {**flow.state(), "width": args.flow_width, "depth": args.flow_depth}
+    targets, conditions = xs[feasible], contexts[feasible]
+    if args.inflight:  # DAgger: the states met in flight, with the aircraft's state in the condition
+        level = np.array([state_features(canonical_scenario(c), None) for c in conditions])
+        conditions = np.hstack([conditions, level])
+        for path in args.inflight:
+            r = np.load(path)
+            ok = r["fitness"] < INFEASIBLE_OFFSET
+            targets = np.vstack([targets, r["x"][ok]])
+            conditions = np.vstack([conditions, np.hstack([r["context"][ok], r["state"][ok]])])
+            log(f"   + {ok.sum()} GA climb plans recorded in flight ({path})")
+    flow = FlowMatchingStudent(latent_dim, conditions.shape[1], args.flow_width, args.flow_depth, device=args.device)
+    tlog = flow.fit(targets, conditions, steps=args.steps)
+    log(f"B. flow matching trained on {len(targets)} GA solutions: {tlog.seconds:.0f}s, final loss {np.mean(tlog.losses[-200:]):.3f}")
+    flow_state = {**flow.state(), "width": args.flow_width, "depth": args.flow_depth, "context_dim": conditions.shape[1]}
     torch.save(flow_state, args.out / "distilled_flow.pt")
 
     # C. Test.

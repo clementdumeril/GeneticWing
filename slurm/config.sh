@@ -96,3 +96,4 @@ TIME_XC="04:00:00"
 # matching model learns its solutions, then the test comparison.
 DISTILL_TRAIN=3000
 TIME_DISTILL="02:00:00"
+TIME_DAGGER="03:00:00"            # each step of `submit_all.sh dagger` (collect, distill, fly)

@@ -100,8 +100,9 @@ def command_latent_plan(
     budget: int,
     rng: np.random.Generator,
     seeds_z: np.ndarray | None = None,
-) -> tuple[Evaluation, np.ndarray]:
-    """GA over the command VAE's latent vector: the best flight (state kept, canonical frame) and its unit commands."""
+) -> tuple[Evaluation, np.ndarray, np.ndarray]:
+    """GA over the command VAE's latent vector: the best flight (state kept, canonical frame), its unit
+    commands, and its point in the GA's unit box (``to_latent`` of it is the latent vector)."""
 
     def objective(x):
         return fly(vae.decode(to_latent(x), context), context, cfg, problem).fitness
@@ -109,7 +110,7 @@ def command_latent_plan(
     seeds = None if seeds_z is None else to_box(seeds_z)
     search = RealGA(population=50).minimize(objective, vae.latent_dim, budget, rng, seeds)
     commands = vae.decode(to_latent(search.x[None]), context)
-    return fly(commands, context, cfg, problem), commands[0]
+    return fly(commands, context, cfg, problem), commands[0], np.asarray(search.x)
 
 
 def command_latent_search(
@@ -130,7 +131,7 @@ def command_latent_search(
     of the final trajectory.
     """
     problem = SoaringProblem(canonical_scenario(context, **scenario_overrides))
-    best, _ = command_latent_plan(vae, context, cfg, problem, budget, rng, seeds_z)
+    best, _, _ = command_latent_plan(vae, context, cfg, problem, budget, rng, seeds_z)
     fitness, cost, feasible = float(best.fitness[0]), float(best.cost[0]), bool(best.feasible[0])
     if nlp_budget:
         s = best.state
