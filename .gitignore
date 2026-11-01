@@ -17,6 +17,14 @@ docs/slides/*.toc
 docs/slides/*.fls
 docs/slides/*.fdb_latexmk
 docs/slides/*.vrb
+docs/report/*.aux
+docs/report/*.log
+docs/report/*.out
+docs/report/*.toc
+docs/report/*.lof
+docs/report/*.lot
+docs/report/*.fls
+docs/report/*.fdb_latexmk
 
 # local editor notes and secrets
 AGENTS.md
