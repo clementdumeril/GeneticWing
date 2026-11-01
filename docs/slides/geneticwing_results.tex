@@ -49,7 +49,7 @@
     \item \textbf{Résultat central.} Le GA dans l'espace appris \good{bat son propre professeur} : $-5{,}72$ contre $-4{,}88$ (aile par tronçons, 65 situations de test), et la phase 3 sur point-masse donnait $-6{,}06$ contre $-5{,}24$.
     \item \textbf{En vol réel simulé.} En air calme, l'avance tient en boucle fermée ($-5{,}41$ contre $-4{,}69$). \bad{Une erreur de 15\,m sur le centre du thermique} fait tout retomber vers $-2$.
     \item \textbf{Sur 20\,km.} Les montées du GA sont \good{61\,\% plus rapides} (2{,}08 contre 1{,}29\,m/s) : $+3{,}3$\,km/h à batterie égale, ou \good{la vitesse du moteur avec 13 fois moins de batterie} ; \good{0 décrochage} grâce à un limiteur d'aile intérieure dans l'autopilote.
-    \item \textbf{En temps réel.} Un générateur \emph{distillé} des solutions du GA fait \good{aussi bien que lui en 0{,}24\,s} au lieu de 13{,}4\,s ($-5{,}72$ contre $-4{,}88$ pour le professeur).
+    \item \textbf{En temps réel.} Un générateur \emph{distillé} des solutions du GA, puis corrigé par DAgger sur les états du vol, \good{monte à 2{,}23\,m/s en 0{,}24\,s par plan} : aussi bien que le GA (13\,s), et plus vite que le moteur à MacCready 1.
   \end{itemize}
 \end{frame}
 
@@ -490,6 +490,27 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
+\begin{frame}{Phase 6 : le générateur en vol de 20\,km, et un tour de DAgger}
+  \scriptsize
+  \centering
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    Montées (64 tâches de 20\,km), MacCready 0{,}5 / 1 & Montée moyenne & Vitesse & Batterie & Temps par plan \\ \midrule
+    Spirale classique & 1{,}29 / 1{,}22\,m/s & 24{,}9 / 28{,}3\,km/h & 2{,}9 / 19{,}3\,kJ & réflexe \\
+    GA latent & 2{,}08 / 2{,}07\,m/s & 28{,}2 / 29{,}5\,km/h & 2{,}9 / 4{,}7\,kJ & $\approx$13\,s \\
+    Générateur distillé sur S1 seulement & \bad{1{,}50 / 1{,}17\,m/s} & 25{,}1 / 28{,}8\,km/h & 4{,}2 / 20{,}2\,kJ & 0{,}24\,s \\
+    \textbf{Générateur après un tour de DAgger} & \good{2{,}23 / 2{,}20\,m/s} & \good{28{,}5 / 30{,}2\,km/h} & 2{,}9 / 4{,}7\,kJ & \good{0{,}24\,s} \\
+    \bottomrule
+  \end{tabular}\par\medskip
+  \small
+  \begin{itemize}
+    \item \textbf{Hors de sa distribution, le premier générateur s'effondre} : appris sur des départs en vol droit entre 180 et 320\,m, il replanifie en plein virage jusqu'à 600\,m, sans connaître l'inclinaison actuelle.
+    \item \textbf{DAgger} : 1\,095 plans de montée gagnés par le GA en vol sont enregistrés (situation, état de l'avion, point latent) ; le générateur est réentraîné dessus, avec l'inclinaison, la vitesse et le $C_L$ dans sa condition.
+    \item Résultat : \good{aussi bien que le GA, et légèrement mieux} (plus rapide sur 84\,\% et 77\,\% des tâches), en 0{,}24\,s par plan ; à MacCready 1, \good{plus rapide que le moteur} (30{,}2 contre 29{,}2\,km/h) avec 13 fois moins de batterie ; 0 décrochage ; inchangé sur les situations S1 ($-5{,}72$).
+  \end{itemize}
+\end{frame}
+
+% ---------------------------------------------------------------------------
 \begin{frame}{Ce qu'on a découvert}
   \small
   \begin{enumerate}
@@ -500,7 +521,7 @@
     \item \textbf{Un MPC à énergie terminale procrastine} : un horizon glissant de 60\,s repousse sans fin le gain ; il faut viser la fin du vol (horizon qui rétrécit).
     \item \textbf{En vol, savoir où est le thermique compte plus que bien planifier} : 15\,m d'erreur coûtent plus que la turbulence.
     \item \textbf{Sur 20\,km, mieux spiraler vaut des km/h} ($+3{,}3$) ou une batterie divisée par 13 ; \textbf{la sécurité se met dans l'autopilote}, pas dans les marges du plan.
-    \item \textbf{La recherche se distille} : un flow matching entraîné sur les solutions du GA fait aussi bien que lui en 0{,}24\,s au lieu de 13{,}4\,s.
+    \item \textbf{La recherche se distille, à condition de lui montrer les situations du vol} : un flow matching entraîné sur les solutions du GA fait aussi bien que lui en 0{,}24\,s, mais seulement après un tour de DAgger sur les états rencontrés en vol.
   \end{enumerate}
 \end{frame}
 
@@ -522,7 +543,7 @@
       \item \bad{Simulation seulement} : point-masse 3 DDL + aile par tronçons, pas de 6 DDL ni de vol réel.
       \item Modèle de thermique synthétique (Allen + cœur gaussien) ; en phase 5, \bad{thermiques connus exactement}.
       \item 17\,\% des situations restent non résolues par le professeur et sont exclues des tests.
-      \item Le générateur distillé (0{,}24\,s par plan) n'est testé que sur des situations S1 (180--320\,m) ; pas encore en vol de 20\,km ni sur calculateur embarqué.
+      \item Le générateur (0{,}24\,s par plan sur un cœur de serveur) n'est pas encore mesuré sur calculateur embarqué ; un seul tour de DAgger, un seul run par configuration.
       \item Au-dessus de 320\,m, le VAE sort de ses données d'entraînement.
     \end{itemize}
   \end{columns}
@@ -545,7 +566,7 @@
     \item \textbf{Recentrer le thermique en vol} (estimateur à partir du vario, comme ArduPilot) : c'est la plus grosse perte mesurée (de $-5$ à $-2$), et la phase 5 suppose aujourd'hui des thermiques connus.
     \item \textbf{Réentraîner le VAE sur des montées jusqu'à 600\,m}, et le conditionner sur la charge alaire et $C_{L,\max}$.
     \item \textbf{Les 17\,\% de situations non résolues} par le professeur.
-    \item \textbf{Le générateur distillé en vol} : dans les vols de 20\,km (en cours sur Savio), puis un second tour d'amélioration (GA amorcé par le générateur, puis redistillé).
+    \item \textbf{Un second tour de DAgger} (les montées du générateur lui-même, relabellisées par le GA), puis le générateur dans la boucle fermée de la phase 4 (rafales, croyance fausse).
     \item \textbf{Vers le réel} : simulateur 6 DDL ou SITL, puis mesures de l'avion.
   \end{enumerate}
 \end{frame}
