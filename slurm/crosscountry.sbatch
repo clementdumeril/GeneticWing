@@ -7,5 +7,10 @@
 set -euo pipefail
 source slurm/common.sh
 
+flow=()
+if [ -f "$DATA/distill/distilled_flow.pt" ]; then
+    flow=(--flow "$DATA/distill/distilled_flow.pt")  # the fast pilots: the generator distilled from the GA
+fi
 run python scenarios/phase5_crosscountry.py --vae "$DATA/physics/command_vae_d16.pt" --tasks "$XC_TASKS" \
-    --search-budget "$XC_SEARCH_BUDGET" --out "$DATA/${XC_OUT:-crosscountry}" --workers "$CORES"
+    --search-budget "$XC_SEARCH_BUDGET" --out "$DATA/${XC_OUT:-crosscountry}" --workers "$CORES" \
+    ${flow[@]+"${flow[@]}"}

@@ -44,7 +44,7 @@ from geneticwing.latent import ConditionalVAE, to_latent  # noqa: E402
 from geneticwing.physvae import fly  # noqa: E402
 from geneticwing.soaring import INFEASIBLE_OFFSET, SoaringProblem  # noqa: E402
 from geneticwing.strip import sbxc_wing  # noqa: E402
-from geneticwing.student import FlowMatchingStudent, Standardizer  # noqa: E402
+from geneticwing.student import FlowMatchingStudent  # noqa: E402
 from geneticwing.torchsim import SimConfig  # noqa: E402
 
 _W: dict = {}
@@ -63,9 +63,7 @@ def _init_worker(vae_state, flow_state, cfg):
     vae.load(vae_state)
     flow = None
     if flow_state is not None:
-        flow = FlowMatchingStudent(c["latent_dim"], 6, cfg["flow_width"], cfg["flow_depth"], device="cpu")
-        flow.model.load_state_dict(flow_state["model"])
-        flow.scaler = Standardizer(flow_state["mean"], flow_state["std"])
+        flow = FlowMatchingStudent.from_state(flow_state, c["latent_dim"], 6, cfg["flow_width"], cfg["flow_depth"])
     _W.update(vae=vae, flow=flow, cfg=cfg, sim=_sim())
 
 
@@ -190,8 +188,7 @@ def main() -> None:
     flow = FlowMatchingStudent(latent_dim, 6, args.flow_width, args.flow_depth, device=args.device)
     tlog = flow.fit(xs[feasible], contexts[feasible], steps=args.steps)
     log(f"B. flow matching trained on {feasible.sum()} GA solutions: {tlog.seconds:.0f}s, final loss {np.mean(tlog.losses[-200:]):.3f}")
-    flow_state = {"model": {k: v.detach().cpu() for k, v in flow.model.state_dict().items()},
-                  "mean": flow.scaler.mean, "std": flow.scaler.std}
+    flow_state = {**flow.state(), "width": args.flow_width, "depth": args.flow_depth}
     torch.save(flow_state, args.out / "distilled_flow.pt")
 
     # C. Test.

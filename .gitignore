@@ -6,3 +6,14 @@ __pycache__/
 build/
 dist/
 results/
+
+# LaTeX build files of the slides
+docs/slides/*.aux
+docs/slides/*.log
+docs/slides/*.nav
+docs/slides/*.out
+docs/slides/*.snm
+docs/slides/*.toc
+docs/slides/*.fls
+docs/slides/*.fdb_latexmk
+docs/slides/*.vrb

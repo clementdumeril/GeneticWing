@@ -120,6 +120,19 @@ class FlowMatchingStudent:
         self.model.eval()
         return TrainingLog(losses, time.perf_counter() - start)
 
+    def state(self) -> dict:
+        return {"model": {k: v.detach().cpu() for k, v in self.model.state_dict().items()},
+                "mean": self.scaler.mean, "std": self.scaler.std}
+
+    @classmethod
+    def from_state(cls, state: dict, dim: int, context_dim: int, width: int = 512, depth: int = 4,
+                   device: str = "cpu") -> "FlowMatchingStudent":
+        student = cls(dim, context_dim, width, depth, device=device)
+        student.model.load_state_dict(state["model"])
+        student.model.eval()
+        student.scaler = Standardizer(np.asarray(state["mean"]), np.asarray(state["std"]))
+        return student
+
     @torch.no_grad()
     def integrate(self, z: np.ndarray, contexts: np.ndarray, t0: float = 0.0, n_steps: int = 8) -> np.ndarray:
         """Euler integration of the flow from ``t0`` to 1, in standardized space."""
