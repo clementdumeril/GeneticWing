@@ -1,0 +1,402 @@
+<title>GeneticWing en mouvement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one slide at a time, an animated stage on the left and its explanation on the right, navigation underneath; stacks on phones. */
+:root {
+  --bg: #eef2f4; --surface: #ffffff; --ink: #14212b; --muted: #586a77; --line: #cdd6dd; --chip: #e4eaee;
+  --stage: #e2eaf0; --grid: #c3cfd8; --sky: #2f6db0; --climb: #17936a; --sink: #c9502f; --therm: #e39a2d; --violet: #7b4fb0;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642; --chip: #1d2a35;
+    --stage: #0f1a23; --grid: #253440; --sky: #6ea6e4; --climb: #39c58c; --sink: #ee7857; --therm: #f0b24c; --violet: #b48ae6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642; --chip: #1d2a35;
+  --stage: #0f1a23; --grid: #253440; --sky: #6ea6e4; --climb: #39c58c; --sink: #ee7857; --therm: #f0b24c; --violet: #b48ae6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); margin: 0; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 16px 20px; display: grid; gap: 14px; min-height: 100%; grid-template-rows: auto 1fr auto; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.brand { font: 700 22px/1 var(--display); letter-spacing: 0.02em; }
+.brand span { color: var(--muted); font-weight: 500; }
+.count { font: 500 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slide { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 18px; align-items: stretch; }
+.stage { position: relative; background: var(--stage); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-height: 360px; aspect-ratio: 16 / 10; max-width: 100%; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.controls { position: absolute; left: 12px; right: 12px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; color: var(--muted); background: color-mix(in srgb, var(--surface) 86%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.controls label { display: flex; align-items: center; gap: 8px; }
+.controls input[type=range] { width: 140px; accent-color: var(--sky); }
+.controls b { font: 500 13px var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { font: 500 13px var(--body); background: transparent; color: var(--ink); border: 0; padding: 5px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.text { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.kicker { font: 600 12px/1 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--sky); }
+.text h1 { font: 700 clamp(26px, 3vw, 34px)/1.08 var(--display); margin: 0; text-wrap: balance; }
+.text p { margin: 0; max-width: 60ch; }
+.text ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.big { display: flex; flex-wrap: wrap; gap: 10px; }
+.stat { background: var(--chip); border-radius: 10px; padding: 8px 12px; min-width: 120px; flex: 1 1 120px; }
+.stat .v { font: 600 24px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.good { color: var(--climb); } .bad { color: var(--sink); }
+.note { font-size: 12.5px; color: var(--muted); }
+.formula { font: 14px var(--mono); background: var(--chip); border-radius: 8px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
+nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+nav > button { font: 600 14px/1 var(--body); background: var(--ink); color: var(--bg); border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+nav > button:disabled { opacity: 0.35; cursor: default; }
+.dots { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 300px; }
+.dots button { font: 500 12px var(--body); color: var(--muted); background: var(--chip); border: 1px solid transparent; border-radius: 999px; padding: 5px 10px; cursor: pointer; }
+.dots button[aria-current="step"] { color: var(--ink); border-color: var(--ink); background: var(--surface); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); margin-right: 4px; }
+.chip.ok { color: var(--climb); border-color: var(--climb); } .chip.part { color: var(--therm); border-color: var(--therm); } .chip.no { color: var(--sink); border-color: var(--sink); }
+@media (max-width: 860px) { .slide { grid-template-columns: minmax(0, 1fr); } .stage { min-height: 300px; } }
+@media (max-width: 420px) { .wrap { padding-inline: 16px; } .controls input[type=range] { width: 100px; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand">GeneticWing <span>· comment tout marche</span></div>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="slide">
+    <div class="stage" id="stage"><canvas id="cv" aria-label="Animation de la slide"></canvas><div class="controls" id="controls" hidden></div></div>
+    <div class="text" id="text" aria-live="polite"></div>
+  </div>
+  <nav>
+    <button id="prev" type="button">Précédent</button>
+    <div class="dots" id="dots" role="tablist" aria-label="Slides"></div>
+    <button id="next" type="button">Suivant</button>
+  </nav>
+</div>
+
+<script>
+const LIVE = /*LIVE_JSON*/null;
+
+(function () {
+  const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+  const $ = id => document.getElementById(id);
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let C = {};
+  const readColors = () => { const s = getComputedStyle(document.documentElement); ["bg","surface","ink","muted","line","chip","stage","grid","sky","climb","sink","therm","violet"].forEach(k => C[k] = s.getPropertyValue("--" + k).trim()); C.mono = s.getPropertyValue("--mono"); C.body = s.getPropertyValue("--body"); };
+  readColors();
+  const fr = (x, d = 1) => x.toFixed(d).replace(".", ",").replace("-", "−");
+  let W = 0, H = 0;
+  function resize() { const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  const text = (s, x, y, o = {}) => { ctx.font = `${o.weight || 400} ${o.size || 13}px ${o.mono ? C.mono : C.body}`; ctx.fillStyle = o.color || C.ink; ctx.textAlign = o.align || "left"; ctx.textBaseline = o.base || "alphabetic"; ctx.fillText(s, x, y); };
+  const line = (pts, color, w = 1.5, dash) => { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]); };
+  const dot = (x, y, r, color) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill(); };
+  const alpha = (hex, a) => { const h = hex.replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+  const varioColor = vz => { const u = Math.max(-1, Math.min(1, vz >= 0 ? vz / 3 : vz / 2)); return u >= 0 ? mix(C.muted, C.climb, u) : mix(C.muted, C.sink, -u); };
+  function mix(a, b, u) { const p = h => { const n = parseInt(h.replace("#", ""), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }; const A = p(a), B = p(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * u)).join(",")})`; }
+  function arrow(x0, y0, x1, y1, color, w = 1.6) { line([[x0, y0], [x1, y1]], color, w); const a = Math.atan2(y1 - y0, x1 - x0), s = 7; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - s * Math.cos(a - 0.4), y1 - s * Math.sin(a - 0.4)); ctx.lineTo(x1 - s * Math.cos(a + 0.4), y1 - s * Math.sin(a + 0.4)); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); }
+  function box(x, y, w, h, label, sub, color) { ctx.fillStyle = C.surface; ctx.strokeStyle = color || C.line; ctx.lineWidth = color ? 1.8 : 1; ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill(); ctx.stroke(); text(label, x + w / 2, y + h / 2 - (sub ? 4 : -4), { align: "center", weight: 600, size: 13 }); if (sub) text(sub, x + w / 2, y + h / 2 + 13, { align: "center", size: 11, color: C.muted }); }
+
+  // A thermal seen from above: Gaussian core.
+  function thermalTop(cx, cy, rpx, a = 0.55) { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rpx * 2); g.addColorStop(0, alpha(C.therm, a)); g.addColorStop(0.5, alpha(C.therm, a * 0.35)); g.addColorStop(1, alpha(C.therm, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rpx * 2, 0, 2 * Math.PI); ctx.fill(); }
+
+  // ---------------------------------------------------------------- slides
+  const S = [];
+
+  S.push({ name: "Le défi", html: `
+    <div class="kicker">Le défi</div>
+    <h1>Faire monter un drone dans l'air chaud, au lieu de vider sa batterie</h1>
+    <p>Un thermique est une colonne d'air qui monte, d'environ 60&nbsp;m de large. Un planeur qui tourne au bon endroit y monte sans moteur. Le SB-XC (4,6&nbsp;m d'envergure, 4,2&nbsp;kg) doit trouver ces cercles tout seul, et vite.</p>
+    <div class="big"><div class="stat"><div class="v">1</div><div class="k">score d'un vol au moteur</div></div><div class="stat"><div class="v good">−5</div><div class="k">5 minutes de moteur gagnées en 1 minute</div></div></div>
+    <p class="note">Le score compte la batterie dépensée moins l'énergie gagnée (altitude, vitesse). Plus il est négatif, mieux c'est.</p>`,
+    draw(t) {
+      const cx = W * 0.5, base = H * 0.86, top = H * 0.08;
+      const g = ctx.createLinearGradient(cx - 90, 0, cx + 90, 0); g.addColorStop(0, alpha(C.therm, 0)); g.addColorStop(0.5, alpha(C.therm, 0.32)); g.addColorStop(1, alpha(C.therm, 0));
+      ctx.fillStyle = g; ctx.fillRect(cx - 90, top, 180, base - top);
+      for (let k = 0; k < 14; k++) { const yy = base - ((t * 40 + k * 60) % (base - top)); dot(cx - 50 + (k * 37 % 100), yy, 2, alpha(C.therm, 0.6)); }
+      line([[W * 0.05, base], [W * 0.95, base]], C.grid, 1);
+      const pts = []; const n = 220, T = 14, tt = (t % T) / T;
+      for (let i = 0; i <= n; i++) { const u = i / n * tt; const a = u * 9 * Math.PI; const zz = base - 20 - u * (base - top - 50); const x = cx + 60 * Math.cos(a), depth = Math.sin(a); pts.push([x, zz + 10 * depth, depth]); }
+      for (let i = 1; i < pts.length; i++) line([pts[i - 1], pts[i]], pts[i][2] < 0 ? alpha(C.climb, 0.4) : C.climb, 2.2);
+      const p = pts[pts.length - 1]; dot(p[0], p[1], 5, C.ink);
+      text(`altitude ${Math.round(200 + tt * 180)} m`, W * 0.06, H * 0.12, { mono: true, size: 13 });
+      text("thermique", cx + 96, base - 12, { color: C.muted, size: 12 });
+    } });
+
+  S.push({ name: "Pourquoi c'est dur", controls: `<label for="rad">Rayon du cercle <input id="rad" type="range" min="10" max="80" value="30"><b id="radv"></b></label><label for="off">Décalage du centre <input id="off" type="range" min="0" max="40" value="0"><b id="offv"></b></label>`,
+    html: `
+    <div class="kicker">Pourquoi c'est dur</div>
+    <h1>Trop serré, l'aile intérieure décroche. Trop large, on sort de l'ascendance.</h1>
+    <p>Règle le rayon et le décalage du cercle : le vario donne la vitesse de montée. Plus on serre, plus on s'incline et plus on chute ; en dessous d'environ 18&nbsp;m l'aile intérieure, plus lente, décroche. Et 15&nbsp;m d'erreur sur le centre coûtent presque tout le gain.</p>
+    <p class="note">Modèle simplifié pour l'illustration : cœur gaussien de 30&nbsp;m, vitesse 9,5&nbsp;m/s, chute qui croît avec l'inclinaison.</p>`,
+    setup() { ["rad", "off"].forEach(id => $(id).addEventListener("input", () => {})); },
+    draw(t) {
+      const R = +$("rad").value, off = +$("off").value; $("radv").textContent = R + " m"; $("offv").textContent = off + " m";
+      const V = 9.5, g = 9.81, bank = Math.atan(V * V / (g * R)), sink = 0.55 / Math.pow(Math.cos(bank), 1.5);
+      const w = d => 3.6 * Math.exp(-((d / 30) ** 2));
+      let m = 0; for (let k = 0; k < 64; k++) { const a = k / 64 * 2 * Math.PI; m += w(Math.hypot(off + R * Math.cos(a), R * Math.sin(a))); } m /= 64;
+      const climb = m - sink, stall = R < 18;
+      const sc = Math.min(W, H) / 220, cx = W * 0.38, cy = H * 0.45;
+      thermalTop(cx, cy, 30 * sc, 0.6);
+      ctx.beginPath(); ctx.arc(cx + off * sc, cy, R * sc, 0, 2 * Math.PI); ctx.strokeStyle = stall ? C.sink : C.sky; ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.stroke(); ctx.setLineDash([]);
+      const a = t * V / R; dot(cx + (off + R * Math.cos(a)) * sc, cy + R * Math.sin(a) * sc, 6, C.ink);
+      dot(cx, cy, 3, C.therm); text("cœur", cx + 6, cy - 6, { size: 11, color: C.muted });
+      // vario gauge
+      const gx = W * 0.8, gy = H * 0.45, gr = Math.min(W, H) * 0.18;
+      ctx.beginPath(); ctx.arc(gx, gy, gr, Math.PI * 0.75, Math.PI * 2.25); ctx.strokeStyle = C.line; ctx.lineWidth = 10; ctx.stroke();
+      const v = Math.max(-3, Math.min(3, climb)), ang = Math.PI * 1.5 + v / 3 * Math.PI * 0.75;
+      ctx.beginPath(); ctx.arc(gx, gy, gr, Math.PI * 1.5, ang, v < 0); ctx.strokeStyle = v >= 0 ? C.climb : C.sink; ctx.stroke(); ctx.lineWidth = 1;
+      text((climb >= 0 ? "+" : "") + fr(climb, 2) + " m/s", gx, gy + 6, { align: "center", mono: true, size: 20, weight: 500, color: v >= 0 ? C.climb : C.sink });
+      text("vario", gx, gy + 28, { align: "center", size: 12, color: C.muted });
+      text(`inclinaison ${Math.round(bank * 180 / Math.PI)}°`, gx, gy + gr + 22, { align: "center", size: 12, mono: true });
+      if (stall) text("décrochage de l'aile intérieure", gx, gy - gr - 12, { align: "center", size: 13, weight: 600, color: C.sink });
+    } });
+
+  S.push({ name: "La physique", html: `
+    <div class="kicker">La physique</div>
+    <h1>Une trajectoire suffit pour connaître tout le reste</h1>
+    <p>En vol coordonné, la position au cours du temps et le vent donnent directement la portance, l'inclinaison et la poussée nécessaire : c'est la <b>platitude différentielle</b>. Pas d'intégration, on évalue des milliers de trajectoires d'un coup.</p>
+    <div class="formula">F = m(a + g·ẑ) → C<sub>L</sub> = |L|/(qS), φ = atan2(L·r̂, L·û), T = F·v̂ + qS·C<sub>D</sub></div>
+    <p>L'aile est découpée en 40 tronçons : en virage, l'aile intérieure vole moins vite que l'extérieure et décroche la première.</p>`,
+    draw(t) {
+      const cx = W * 0.5, cy = H * 0.52, s = Math.min(W, H) / 7, phi = 0.5 * Math.sin(t * 0.7);
+      line([[W * 0.08, cy], [W * 0.92, cy]], C.grid, 1);
+      const c = Math.cos(phi), sn = Math.sin(phi), span = 2.4 * s;
+      line([[cx - span * c, cy - span * sn], [cx + span * c, cy + span * sn]], C.ink, 4);
+      dot(cx, cy, 6, C.ink);
+      const L = 1.6 * s; arrow(cx, cy, cx + L * sn, cy - L * c, C.climb, 2.2); text("portance", cx + L * sn + 8, cy - L * c, { color: C.climb, size: 13 });
+      arrow(cx, cy, cx, cy + 1.3 * s, C.sink, 2.2); text("poids", cx + 8, cy + 1.3 * s, { color: C.sink, size: 13 });
+      arrow(cx, cy, cx + L * sn, cy, C.sky, 2); text("force qui fait tourner", cx + L * sn + (phi > 0 ? 8 : -150), cy + 16, { color: C.sky, size: 12 });
+      const inner = phi > 0 ? 1 : -1;
+      [-1, 1].forEach(side => { const v = 9.5 * (1 + side * inner * 0.18 * Math.abs(phi) / 0.5); const x = cx + side * span * 0.9 * c, y = cy + side * span * 0.9 * sn;
+        const hgt = v * 7; ctx.fillStyle = side === inner ? alpha(C.sink, 0.7) : alpha(C.sky, 0.6); ctx.fillRect(x - 8, H * 0.2 - hgt + 60, 16, hgt);
+        text(`${fr(v, 1)} m/s`, x, H * 0.2 + 76, { align: "center", size: 11, mono: true }); text(side === inner ? "intérieure" : "extérieure", x, H * 0.2 + 90, { align: "center", size: 11, color: C.muted }); });
+      text(`inclinaison ${Math.round(Math.abs(phi) * 180 / Math.PI)}°`, W * 0.06, H * 0.9, { mono: true, size: 13 });
+      text("vue de l'arrière", W * 0.94, H * 0.9, { align: "right", size: 12, color: C.muted });
+    } });
+
+  // Teacher: raw GA vs law + NLP.
+  const rng = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(7);
+  S.push({ name: "Le professeur", html: `
+    <div class="kicker">Phase 2 · le professeur</div>
+    <h1>Un GA sur la trajectoire brute échoue. Une loi de pilotage + un optimiseur réussit.</h1>
+    <p>Sur 87 paramètres couplés, l'algorithme génétique tâtonne sans trouver le cercle. Une loi réactive (« tourne autour du centre à tel rayon ») donne la forme, puis l'optimiseur local SLSQP la peaufine : c'est le <b>professeur</b>, lent (≈35&nbsp;s) mais excellent.</p>
+    <div class="big"><div class="stat"><div class="v bad">+0,15</div><div class="k">GA brut (thermique S1)</div></div><div class="stat"><div class="v good">−6,04</div><div class="k">loi + optimiseur</div></div></div>`,
+    draw(t) {
+      const half = W / 2, sc = Math.min(half, H) / 260;
+      [[half * 0.5, "GA sur 87 gènes"], [half * 1.5, "loi réactive + SLSQP"]].forEach(([cx, lab], k) => {
+        const cy = H * 0.48; thermalTop(cx, cy, 30 * sc * 1.4, 0.5); text(lab, cx, H * 0.1, { align: "center", weight: 600, size: 14 });
+        if (k === 0) { const gen = Math.floor(t * 2) % 1000; text(`génération ${gen}`, cx, H * 0.92, { align: "center", mono: true, size: 12, color: C.muted });
+          for (let j = 0; j < 7; j++) { let x = cx - 90 * sc, y = cy + 70 * sc, h = -0.6, pts = [[x, y]]; const seed = Math.sin(gen * 12.9 + j * 78.2) * 43758.5;
+            for (let i = 0; i < 40; i++) { const r = Math.sin(seed + i * 1.7) * 0.5 + Math.sin(seed * 0.3 + i * 0.4) * 0.3; h += r * 0.35; x += Math.cos(h) * 5 * sc; y += Math.sin(h) * 5 * sc; pts.push([x, y]); }
+            line(pts, alpha(C.sink, 0.55), 1.3); } }
+        else { const it = Math.min(1, (t % 8) / 6); const pts = []; for (let i = 0; i <= 160; i++) { const u = i / 160; const a = u * 6 * Math.PI; const r0 = 70 * (1 - u) + 22 * u; const wob = (1 - it) * 18 * Math.sin(u * 23 + t);
+            pts.push([cx + (r0 + wob) * sc * Math.cos(a) - (1 - u) * 40 * sc, cy + (r0 + wob) * sc * Math.sin(a) + (1 - u) * 30 * sc]); }
+          line(pts, C.climb, 2); text(`itération ${Math.round(it * 60)}`, cx, H * 0.92, { align: "center", mono: true, size: 12, color: C.muted }); } });
+    } });
+
+  S.push({ name: "Les données", html: `
+    <div class="kicker">Phase 3 · les données</div>
+    <h1>15&nbsp;080 situations résolues par le professeur</h1>
+    <p>Chaque situation tire un thermique (force, position), un vent et un point de départ au hasard. Le professeur les résout toutes, dans les deux sens de rotation, sur 21 nœuds de 32 cœurs du cluster Savio, en un quart d'heure.</p>
+    <div class="big"><div class="stat"><div class="v" id="ctr">0</div><div class="k">situations</div></div><div class="stat"><div class="v">21&nbsp;034</div><div class="k">trajectoires (aile par tronçons)</div></div></div>`,
+    draw(t) {
+      const cols = Math.max(6, Math.floor(W / 70)), rows = Math.max(4, Math.floor(H / 70)), cw = W / cols, ch = H / rows, shown = Math.min(cols * rows, Math.floor(t * 9));
+      for (let k = 0; k < shown; k++) { const i = k % cols, j = Math.floor(k / cols), cx = i * cw + cw / 2, cy = j * ch + ch / 2; const s1 = Math.sin(k * 12.7) * 0.5 + 0.5, s2 = Math.cos(k * 7.3) * 0.5 + 0.5;
+        thermalTop(cx + (s1 - 0.5) * 12, cy + (s2 - 0.5) * 12, 8, 0.4);
+        const pts = []; for (let q = 0; q <= 40; q++) { const u = q / 40, a = u * 4 * Math.PI * (k % 2 ? 1 : -1); pts.push([cx + (s1 - 0.5) * 12 + 9 * Math.cos(a) - (1 - u) * 22 * Math.cos(s2 * 6), cy + (s2 - 0.5) * 12 + 9 * Math.sin(a) - (1 - u) * 22 * Math.sin(s2 * 6)]); }
+        line(pts, alpha(C.climb, 0.8), 1); }
+      const c = $("ctr"); if (c) c.textContent = Math.min(15080, Math.round(t * 1400)).toLocaleString("fr-FR");
+    } });
+
+  S.push({ name: "L'espace appris", html: `
+    <div class="kicker">Phase 3 · un espace appris</div>
+    <h1>Un VAE résume chaque trajectoire en 16 nombres, et son décodeur est un simulateur</h1>
+    <p>Le décodeur ne sort pas des positions mais des <b>commandes</b> (C<sub>L</sub>, inclinaison, poussée) bornées, qu'un simulateur fait voler. Toute trajectoire décodée est donc physiquement faisable.</p>
+    <div class="big"><div class="stat"><div class="v bad">20&nbsp;%</div><div class="k">faisables avec un décodeur de positions</div></div><div class="stat"><div class="v good">100&nbsp;%</div><div class="k">avec le décodeur physique</div></div></div>`,
+    draw(t) {
+      const y = H * 0.45, bw = Math.min(110, W / 6.5), bh = 58, xs = [0.02, 0.21, 0.4, 0.59, 0.78].map(f => W * f + 6);
+      const labs = [["trajectoire", "du professeur"], ["encodeur", ""], ["16 nombres", "espace latent"], ["décodeur", "→ commandes"], ["simulateur", "RK4, bornes"]];
+      xs.forEach((x, i) => box(x, y - bh / 2, bw, bh, labs[i][0], labs[i][1], i >= 2 ? C.climb : null));
+      for (let i = 0; i < 4; i++) arrow(xs[i] + bw + 2, y, xs[i + 1] - 4, y, C.muted);
+      for (let k = 0; k < 5; k++) { const u = ((t * 0.25 + k / 5) % 1) * 4; const i = Math.floor(u), f = u - i; dot(xs[i] + bw + (xs[i + 1] - xs[i] - bw) * f, y, 3.5, C.sky); }
+      for (let i = 0; i < 16; i++) { const v = Math.sin(t * 1.3 + i * 0.9) * 0.5 + 0.5; ctx.fillStyle = alpha(C.sky, 0.75); ctx.fillRect(xs[2] + 8 + i * (bw - 16) / 16, y + bh / 2 + 8 + 30 * (1 - v), (bw - 16) / 16 - 1, 30 * v); }
+      ["C_L", "incl.", "poussée"].forEach((lab, k) => { const pts = []; for (let i = 0; i <= 40; i++) pts.push([xs[3] + 6 + i * (bw - 12) / 40, y + bh / 2 + 22 + k * 18 - 7 * Math.sin(i * 0.3 + t + k)]); line(pts, [C.climb, C.sky, C.therm][k], 1.4); });
+      const sp = []; for (let i = 0; i <= 90; i++) { const u = i / 90, a = u * 5 * Math.PI; sp.push([xs[4] + bw / 2 + 20 * Math.cos(a), y - bh / 2 - 18 - u * 80 + 6 * Math.sin(a)]); } line(sp, C.climb, 1.8);
+      const sp2 = sp.map(p => [p[0] - xs[4] + xs[0], p[1]]); line(sp2, C.muted, 1.4);
+    } });
+
+  // Latent GA on a synthetic 2-D landscape.
+  const peaks = [[0.62, 0.38, 1.0, 0.11], [0.3, 0.7, 0.75, 0.13], [0.25, 0.25, 0.5, 0.1], [0.8, 0.78, 0.6, 0.09]];
+  const fit = (x, y) => peaks.reduce((s, [a, b, h, w]) => s + h * Math.exp(-((x - a) ** 2 + (y - b) ** 2) / (2 * w * w)), 0);
+  let pop = [], gen = 0, lastGen = -1, heat = null;
+  function resetPop() { pop = Array.from({ length: 50 }, () => [0.5 + (rng() - 0.5) * 0.3, 0.5 + (rng() - 0.5) * 0.3]); gen = 0; }
+  function stepGA() { const scored = pop.map(p => [fit(p[0], p[1]), p]).sort((a, b) => b[0] - a[0]); const elite = scored.slice(0, 15).map(s => s[1]); const next = elite.slice(0, 5).map(p => p.slice());
+    while (next.length < 50) { const a = elite[Math.floor(rng() * elite.length)], b = elite[Math.floor(rng() * elite.length)], u = rng(); next.push([Math.min(1, Math.max(0, a[0] * u + b[0] * (1 - u) + (rng() - 0.5) * 0.06)), Math.min(1, Math.max(0, a[1] * u + b[1] * (1 - u) + (rng() - 0.5) * 0.06))]); }
+    pop = next; gen++; }
+  resetPop();
+  S.push({ name: "Le GA dans l'espace appris", html: `
+    <div class="kicker">Phase 3 · le retournement</div>
+    <h1>Le même GA, cette fois dans l'espace appris, bat son professeur</h1>
+    <p>Dans 16 dimensions qui ne contiennent que des trajectoires plausibles, la recherche génétique devient efficace : chaque candidat est décodé et volé dans le simulateur, les meilleurs se reproduisent. Elle trouve des cercles que le professeur ne pouvait pas atteindre.</p>
+    <div class="big"><div class="stat"><div class="v">−4,88</div><div class="k">professeur</div></div><div class="stat"><div class="v good">−5,72</div><div class="k">GA dans l'espace appris</div></div></div>
+    <p class="note">Illustration : 2 des 16 dimensions, paysage de score stylisé. Chiffres réels : 65 situations de test, aile par tronçons.</p>`,
+    enter() { resetPop(); heat = null; },
+    draw(t) {
+      const N = 60, s = Math.min(W, H) * 0.86, ox = (W - s) / 2, oy = (H - s) / 2;
+      if (!heat) { heat = []; for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) heat.push(fit((i + 0.5) / N, (j + 0.5) / N)); }
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { ctx.fillStyle = alpha(C.climb, Math.min(0.55, heat[i * N + j] * 0.55)); ctx.fillRect(ox + i * s / N, oy + j * s / N, s / N + 0.5, s / N + 0.5); }
+      ctx.strokeStyle = C.line; ctx.strokeRect(ox, oy, s, s);
+      const g = Math.floor(t * 2.2); if (g !== lastGen) { lastGen = g; if (gen < 40) stepGA(); else if (t % 20 > 19.5) resetPop(); }
+      pop.forEach(p => dot(ox + p[0] * s, oy + p[1] * s, 3.5, C.ink));
+      const best = pop.reduce((a, b) => fit(a[0], a[1]) > fit(b[0], b[1]) ? a : b); dot(ox + best[0] * s, oy + best[1] * s, 7, C.climb);
+      text(`génération ${gen}`, ox + 8, oy + 20, { mono: true, size: 12 }); text("latent 1", ox + s / 2, oy + s + 16, { align: "center", size: 11, color: C.muted });
+    } });
+
+  // Closed loop replay.
+  let loopKey = "wrong_mpc";
+  S.push({ name: "En vol simulé", controls: `<div class="seg" role="group" aria-label="Condition"><button type="button" id="lc" aria-pressed="false">air calme</button><button type="button" id="lw" aria-pressed="true">thermique mal estimé</button></div><span>vitesse ×4</span>`,
+    html: `
+    <div class="kicker">Phase 4 · boucle fermée</div>
+    <h1>L'autopilote suit les plans à 1–2&nbsp;m près. Le vrai problème : savoir où est le thermique.</h1>
+    <p>Toutes les 10&nbsp;s, le planificateur refait un plan (bleu) depuis l'endroit où se trouve l'avion. Avec une erreur de 15&nbsp;m sur le centre (croix), la spirale est propre mais décalée : elle tourne au bord du vrai cœur (orange).</p>
+    <div class="big"><div class="stat"><div class="v good">−5,41</div><div class="k">GA, air calme (65 situations)</div></div><div class="stat"><div class="v bad">−1,87</div><div class="k">GA, thermique mal estimé</div></div></div>`,
+    setup() { const set = k => { loopKey = k; $("lc").setAttribute("aria-pressed", String(k === "calm_open")); $("lw").setAttribute("aria-pressed", String(k === "wrong_mpc")); this.t0 = performance.now(); };
+      $("lc").onclick = () => set("calm_open"); $("lw").onclick = () => set("wrong_mpc"); },
+    draw(t) {
+      if (!LIVE) return; const f = LIVE.loop.flights[loopKey], th = LIVE.loop.thermal;
+      const xs = f.x.concat(...f.plans.map(p => p.x)), ys = f.y.concat(...f.plans.map(p => p.y));
+      const x0 = Math.min(...xs) - 20, x1 = Math.max(...xs) + 20, y0 = Math.min(...ys) - 20, y1 = Math.max(...ys) + 20;
+      const sc = Math.min(W / (x1 - x0), (H - 50) / (y1 - y0)), X = x => (W - (x1 - x0) * sc) / 2 + (x - x0) * sc, Y = y => (H - 40) - ((H - 50) - (y1 - y0) * sc) / 2 - (y - y0) * sc;
+      const T = f.t[f.t.length - 1], tt = reduce ? T : (t * 4) % (T + 4), i = Math.min(f.t.length - 1, f.t.findIndex(v => v > tt) < 0 ? f.t.length - 1 : f.t.findIndex(v => v > tt));
+      const tc = [th.c[0] + th.d[0] * tt, th.c[1] + th.d[1] * tt]; thermalTop(X(tc[0]), Y(tc[1]), th.core * sc, 0.6);
+      if (loopKey === "wrong_mpc") { const b = f.belief, bc = [b.center[0] + b.wind[0] * tt, b.center[1] + b.wind[1] * tt]; const bx = X(bc[0]), by = Y(bc[1]); line([[bx - 8, by - 8], [bx + 8, by + 8]], C.ink, 2); line([[bx - 8, by + 8], [bx + 8, by - 8]], C.ink, 2); text("centre cru", bx + 10, by - 8, { size: 11, color: C.muted }); }
+      let pk = 0; f.plans.forEach((p, k) => { if (p.t0 <= tt) pk = k; }); const pl = f.plans[pk]; line(pl.x.map((x, k) => [X(x), Y(pl.y[k])]), alpha(C.sky, 0.8), 1.4, [5, 4]);
+      for (let k = 1; k <= i; k++) line([[X(f.x[k - 1]), Y(f.y[k - 1])], [X(f.x[k]), Y(f.y[k])]], varioColor(f.vz[k]), 2.2);
+      dot(X(f.x[i]), Y(f.y[i]), 5, C.ink);
+      text(`t = ${fr(Math.min(tt, T), 1)} s · altitude ${Math.round(f.z[i])} m · plan ${pk + 1}/${f.plans.length}`, 12, 20, { mono: true, size: 12 });
+    } });
+
+  // Cross-country race.
+  S.push({ name: "20 km", html: `
+    <div class="kicker">Phase 5 · longue distance</div>
+    <h1>Sur 20&nbsp;km, mieux spiraler, c'est arriver plus vite</h1>
+    <p>Un tacticien (théorie de MacCready) choisit les thermiques et quand les quitter ; seule change la façon de monter. Ici, la même tâche avec la spirale classique (gris) et avec les montées du GA (vert).</p>
+    <div class="big"><div class="stat"><div class="v good">+61&nbsp;%</div><div class="k">vitesse de montée (64 tâches)</div></div><div class="stat"><div class="v good">13×</div><div class="k">moins de batterie que le moteur, même vitesse</div></div><div class="stat"><div class="v">0</div><div class="k">décrochage (limiteur d'aile)</div></div></div>`,
+    draw(t) {
+      if (!LIVE) return; const X0 = 40, X1 = W - 16, Ytop = 30, Ybot = H - 50, D = LIVE.xc.distance;
+      const X = d => X0 + d / D * (X1 - X0), Z = z => Ybot - (z / 650) * (Ybot - Ytop);
+      [120, 600].forEach((z, k) => line([[X0, Z(z)], [X1, Z(z)]], k ? alpha(C.sky, 0.6) : alpha(C.sink, 0.6), 1, [4, 4]));
+      text("plafond 600 m", X0 + 4, Z(600) - 5, { size: 11, color: C.sky }); text("plancher moteur 120 m", X0 + 4, Z(120) - 5, { size: 11, color: C.sink });
+      for (let z = 0; z <= 600; z += 200) text(z + " m", 4, Z(z) + 4, { size: 10, mono: true, color: C.muted });
+      for (let d = 0; d <= D; d += 5000) text(d / 1000 + " km", X(d), H - 30, { size: 10, mono: true, color: C.muted, align: "center" });
+      const tmax = Math.max(...LIVE.xc.flights.map(f => f.t[f.t.length - 1])); const tt = reduce ? tmax : (t * 120) % (tmax + 240);
+      LIVE.xc.flights.forEach((f, k) => { const col = k ? C.climb : C.muted; let j = f.t.findIndex(v => v > tt); if (j < 0) j = f.t.length - 1;
+        const pts = []; for (let q = 0; q <= j; q++) pts.push([X(Math.max(0, f.x[q])), Z(f.z[q])]); line(pts, col, k ? 2.2 : 1.6);
+        dot(pts[pts.length - 1][0], pts[pts.length - 1][1], 5, col);
+        text(`${f.label} : ${fr(f.x[j] / 1000, 1)} km`, W - 16, 18 + k * 18, { align: "right", size: 12, color: col, weight: 600 }); });
+      text(`${Math.floor(Math.min(tt, tmax) / 60)} min de vol`, X0 + 4, 18, { mono: true, size: 12 });
+    } });
+
+  S.push({ name: "Distiller la recherche", html: `
+    <div class="kicker">Phase 6 · distillation + DAgger</div>
+    <h1>Un générateur apprend ce que trouve le GA, et le fait en 0,24&nbsp;s au lieu de 13&nbsp;s</h1>
+    <p>Le GA est trop lent pour le vol. On entraîne un flow matching sur ses meilleures solutions ; en vol, il propose 64 trajectoires, le simulateur les vérifie, on garde la meilleure. Hors de ses situations d'entraînement il s'effondrait : on l'a réentraîné sur les situations rencontrées en vol (DAgger).</p>
+    <div class="big"><div class="stat"><div class="v">13,4&nbsp;s</div><div class="k">GA par plan</div></div><div class="stat"><div class="v good">0,24&nbsp;s</div><div class="k">générateur par plan</div></div></div>`,
+    draw(t) {
+      const x0 = 24, x1 = W - 24, y = 42;
+      text("temps par plan", x0, y - 14, { size: 12, color: C.muted });
+      const p = reduce ? 1 : Math.min(1, (t % 10) / 6.7);
+      [["GA (13,4 s)", 13.4, C.sky], ["générateur (0,24 s)", 0.24, C.climb]].forEach(([lab, s, col], k) => { const yy = y + k * 30; ctx.fillStyle = C.chip; ctx.fillRect(x0, yy, x1 - x0, 18);
+        const fill = Math.min(1, p * 13.4 / s) * (s / 13.4); ctx.fillStyle = alpha(col, 0.45); ctx.fillRect(x0, yy, (x1 - x0) * fill, 18); text(lab, x0 + 6, yy + 13, { size: 12, color: C.ink, weight: 600 }); });
+      const bars = [["spirale classique", 1.29, C.muted], ["GA", 2.08, C.sky], ["générateur (1re version)", 1.50, C.sink], ["générateur après DAgger", 2.23, C.climb]];
+      const bx = x0, by = H - 40, bh = H - 170, bw = (x1 - x0) / 4;
+      text("vitesse de montée sur 20 km (m/s)", x0, 124, { size: 12, color: C.muted });
+      const g = reduce ? 1 : Math.min(1, ((t + 2) % 10) / 4);
+      bars.forEach(([lab, v, col], k) => { const h = bh * v / 2.4 * Math.min(1, Math.max(0, g * 4 - k)); ctx.fillStyle = col; ctx.fillRect(bx + k * bw + bw * 0.18, by - h, bw * 0.64, h);
+        text(fr(v, 2), bx + k * bw + bw / 2, by - h - 6, { align: "center", mono: true, size: 13, weight: 500 }); text(lab, bx + k * bw + bw / 2, by + 16, { align: "center", size: 11, color: C.muted }); });
+    } });
+
+  S.push({ name: "Tableau de bord", html: `
+    <div class="kicker">Tableau de bord</div>
+    <h1>Où en est chaque hypothèse</h1>
+    <ul>
+      <li><span class="chip part">reformulée</span>H1 : le GA brut échoue, le GA dans l'espace appris bat le professeur.</li>
+      <li><span class="chip ok">tenue</span>H2 : le générateur distillé plane en 0,24&nbsp;s avec la qualité du GA.</li>
+      <li><span class="chip ok">tenue</span>H3 : la régression échoue (0&nbsp;%), le génératif gère les deux sens de rotation.</li>
+      <li><span class="chip part">en partie</span>H4 : l'optimisation locale aide (76&nbsp;% contre 8&nbsp;%).</li>
+      <li><span class="chip no">ouverte</span>H5 : robuste en air calme ; il faut estimer le thermique en vol.</li>
+      <li><span class="chip ok">tenue</span>H6 : un tour de DAgger : 1,50 → 2,23&nbsp;m/s.</li>
+    </ul>`,
+    draw(t) {
+      const tiles = [["−5,72", "contre −4,88", "score sur 65 situations de test"], ["+61 %", "2,08 contre 1,29 m/s", "vitesse de montée, 20 km"], ["13×", "4,7 contre 61,9 kJ", "moins de batterie que le moteur"], ["0", "sur 64 tâches", "décrochage avec le limiteur"], ["0,24 s", "contre 13,4 s", "par plan, après distillation"], ["15 080", "situations", "résolues par le professeur"]];
+      const cols = W > 520 ? 3 : 2, rows = Math.ceil(tiles.length / cols), gw = (W - 30) / cols, gh = (H - 30) / rows, a = reduce ? 1 : Math.min(1, t / 1.2);
+      tiles.forEach(([v, s, k], i) => { const x = 15 + (i % cols) * gw, y = 15 + Math.floor(i / cols) * gh + (1 - a) * 20;
+        ctx.globalAlpha = a; ctx.fillStyle = C.surface; ctx.strokeStyle = C.line; ctx.beginPath(); ctx.roundRect(x + 5, y + 5, gw - 10, gh - 10, 10); ctx.fill(); ctx.stroke();
+        text(v, x + 20, y + gh * 0.45, { size: Math.min(34, gh * 0.28), mono: true, weight: 500, color: i === 3 ? C.ink : C.climb }); text(s, x + 20, y + gh * 0.45 + 22, { size: 12 }); text(k, x + 20, y + gh * 0.45 + 40, { size: 11, color: C.muted }); ctx.globalAlpha = 1; });
+    } });
+
+  // Recentering demo.
+  let est = null;
+  S.push({ name: "La suite", html: `
+    <div class="kicker">La suite</div>
+    <h1>Recentrer le thermique en vol, puis voler sur un avion du labo</h1>
+    <p>L'avion mesure la montée à chaque point du cercle : elle est plus forte du côté du cœur. Un filtre en déduit le vrai centre (croix verte) et la replanification le suit. C'est la plus grosse perte mesurée.</p>
+    <ul>
+      <li><b>Point 2</b> : faire voler le générateur rapide dans les rafales et avec un thermique mal placé (phase 4), puis un 2<sup>e</sup> tour de DAgger.</li>
+      <li><b>Les 17&nbsp;%</b> : situations où <i>le professeur</i> (loi + SLSQP) ne trouve rien de sûr ; le GA latent peut servir de professeur de secours.</li>
+      <li><b>Vol réel</b> : identifier l'avion du labo (charge alaire, C<sub>L,max</sub>), puis SITL.</li>
+    </ul>
+    <p class="note">Animation : estimateur simplifié (barycentre des positions pondéré par la montée mesurée).</p>`,
+    enter() { est = null; },
+    draw(t) {
+      const s = Math.min(W, H) / 200, cx = W * 0.5, cy = H * 0.48, truth = [0, 0];
+      if (!est || t < 0.05) est = { c: [22, -14], sw: 0, sx: 0, sy: 0 };
+      thermalTop(cx, cy, 30 * s, 0.6); dot(cx, cy, 3, C.therm);
+      const R = 26, a = t * 0.9, px = est.c[0] + R * Math.cos(a), py = est.c[1] + R * Math.sin(a);
+      const w = 3.6 * Math.exp(-((px - truth[0]) ** 2 + (py - truth[1]) ** 2) / 900);
+      est.sw = est.sw * 0.995 + w; est.sx = est.sx * 0.995 + w * px; est.sy = est.sy * 0.995 + w * py;
+      const target = [est.sx / est.sw, est.sy / est.sw]; est.c[0] += (target[0] - est.c[0]) * 0.01; est.c[1] += (target[1] - est.c[1]) * 0.01;
+      if (Math.hypot(est.c[0], est.c[1]) < 1.5 && t % 18 > 17.8) est = null;
+      ctx.beginPath(); ctx.arc(cx + est.c[0] * s, cy + est.c[1] * s, R * s, 0, 2 * Math.PI); ctx.strokeStyle = alpha(C.sky, 0.7); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+      const ex = cx + est.c[0] * s, ey = cy + est.c[1] * s; line([[ex - 9, ey], [ex + 9, ey]], C.climb, 2.4); line([[ex, ey - 9], [ex, ey + 9]], C.climb, 2.4);
+      dot(cx + px * s, cy + py * s, 5.5, C.ink);
+      text(`erreur sur le centre : ${fr(Math.hypot(est.c[0], est.c[1]), 1)} m`, 12, 22, { mono: true, size: 13 }); text(`montée mesurée : ${fr(w - 0.9, 2)} m/s`, 12, 42, { mono: true, size: 12, color: w - 0.9 > 0 ? C.climb : C.sink });
+    } });
+
+  // ---------------------------------------------------------------- navigation
+  let cur = 0, t0 = performance.now();
+  const dots = $("dots");
+  S.forEach((s, i) => { const b = document.createElement("button"); b.type = "button"; b.textContent = s.name; b.setAttribute("role", "tab"); b.onclick = () => go(i); dots.appendChild(b); });
+  function go(i) {
+    cur = Math.max(0, Math.min(S.length - 1, i)); const s = S[cur];
+    $("text").innerHTML = s.html; const ctl = $("controls"); ctl.hidden = !s.controls; ctl.innerHTML = s.controls || "";
+    if (s.setup) s.setup.call(s); if (s.enter) s.enter.call(s);
+    t0 = performance.now(); s.t0 = t0;
+    dots.querySelectorAll("button").forEach((b, k) => b.toggleAttribute("aria-current", k === cur) || (k === cur && b.setAttribute("aria-current", "step")));
+    dots.querySelectorAll("button").forEach((b, k) => { if (k === cur) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
+    $("count").textContent = `${cur + 1} / ${S.length}`; $("prev").disabled = cur === 0; $("next").disabled = cur === S.length - 1;
+    try { localStorage.setItem("gw-live-slide", String(cur)); } catch (e) {}
+    resize(); frame(performance.now());
+  }
+  function frame(now) { const s = S[cur]; ctx.clearRect(0, 0, W, H); const t = reduce ? 30 : (now - (s.t0 || t0)) / 1000; s.draw.call(s, t); }
+  function loop(now) { if (!reduce) frame(now); requestAnimationFrame(loop); }
+  $("prev").onclick = () => go(cur - 1); $("next").onclick = () => go(cur + 1);
+  document.addEventListener("keydown", e => { if (e.target.closest && e.target.closest("input")) return; if (e.key === "ArrowRight") go(cur + 1); if (e.key === "ArrowLeft") go(cur - 1); });
+  window.addEventListener("resize", () => { resize(); frame(performance.now()); });
+  const retheme = () => { readColors(); heat = null; frame(performance.now()); };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  let start = 0; try { start = Math.min(S.length - 1, Math.max(0, parseInt(localStorage.getItem("gw-live-slide") || "0", 10) || 0)); } catch (e) {}
+  if (location.hash) { const k = S.findIndex(s => s.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") === location.hash.slice(1)); if (k >= 0) start = k; }
+  go(start); requestAnimationFrame(loop);
+})();
+</script>
