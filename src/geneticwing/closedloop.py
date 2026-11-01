@@ -172,6 +172,20 @@ class Start:
     elapsed: float = 0.0  # s flown since it was made
 
 
+def state_features(scenario: SoaringScenario, start: Start | None) -> np.ndarray:
+    """What an in-flight generator knows of the aircraft besides the situation: bank, airspeed and C_L, scaled.
+
+    Before the first plan the aircraft flies level at the scenario's airspeed
+    (the phase 3 situations); in flight, the state the previous segment ended in.
+    """
+    ac = scenario.aircraft
+    if start is None:
+        bank, cl = 0.0, ac.weight / (ac.dynamic_pressure(scenario.airspeed) * ac.wing_area)
+    else:
+        bank, cl = start.bank, start.cl
+    return np.array([bank / 0.6, (scenario.airspeed - 9.0) / 2.0, (cl - 0.8) / 0.3])
+
+
 def _directions(start: Start | None, threshold_deg: float = 10.0) -> tuple[bool, ...]:
     """Orbit directions to plan in (True = counter-clockwise): the current one once a turn is taken."""
     if start is None or start.previous is None or abs(start.bank) < np.radians(threshold_deg):
@@ -282,6 +296,7 @@ class LatentPlanner(_CommandPlanner):
     def __init__(self, vae, cfg, budget: int = 3_000, cl_margin: float | None = None):
         super().__init__(vae, cfg)
         self.budget, self.cl_margin = budget, cl_margin
+        self.recorder: list | None = None  # a list: every plan the GA wins is appended (to distill it in flight)
 
     def __call__(self, scenario: SoaringScenario, rng: np.random.Generator, start: Start | None = None) -> Plan:
         from geneticwing.physvae import command_latent_plan, fly
@@ -291,11 +306,14 @@ class LatentPlanner(_CommandPlanner):
         seeds = np.zeros((1, self.vae.latent_dim))
         if z_rest is not None:
             seeds = np.vstack([seeds, z_rest])
-        ev, commands = command_latent_plan(decoder, context, cfg, problem, self.budget, rng, seeds)
+        ev, commands, x = command_latent_plan(decoder, context, cfg, problem, self.budget, rng, seeds)
         if rest is not None:  # carrying on with the plan being flown is a candidate too
             carry = fly(rest, context, cfg, problem)
             if carry.fitness[0] < ev.fitness[0]:
-                ev, commands = carry, rest[0]
+                return self._to_world(carry, 0, scenario, rest[0])
+        if self.recorder is not None:
+            self.recorder.append({"context": context, "state": state_features(scenario, start), "x": x,
+                                  "fitness": float(ev.fitness[0]), "cost": float(ev.cost[0])})
         return self._to_world(ev, 0, scenario, commands)
 
 
@@ -338,7 +356,10 @@ class DistilledPlanner(_CommandPlanner):
 
         context, cfg, problem = self._problem(scenario)
         decoder, rest, z_rest = self._in_flight(start, context, cfg)
-        z = to_latent(self.flow.sample(context, self.samples, rng=rng))
+        condition = context
+        if getattr(self.flow, "context_dim", 6) > len(context):  # a generator distilled in flight also sees the state
+            condition = np.concatenate([context, state_features(scenario, start)])
+        z = to_latent(self.flow.sample(condition, self.samples, rng=rng))
         candidates = decoder.decode(z if z_rest is None else np.vstack([z, z_rest]), context)
         if rest is not None:
             candidates = np.vstack([candidates, rest])
@@ -354,7 +375,8 @@ def load_distilled(path, latent_dim: int, context_dim: int = 6):
     from geneticwing.student import FlowMatchingStudent
 
     state = torch.load(path, weights_only=False, map_location="cpu")
-    return FlowMatchingStudent.from_state(state, latent_dim, context_dim, state.get("width", 256), state.get("depth", 3))
+    return FlowMatchingStudent.from_state(state, latent_dim, state.get("context_dim", context_dim),
+                                          state.get("width", 256), state.get("depth", 3))
 
 
 # -- the loop ---------------------------------------------------------------------------------

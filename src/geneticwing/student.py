@@ -95,7 +95,7 @@ class FlowMatchingStudent:
         self.device = resolve_device(device)
         self.model = VelocityField(dim, context_dim, width, depth).to(self.device)
         self.scaler: Standardizer | None = None
-        self.dim = dim
+        self.dim, self.context_dim = dim, context_dim
 
     def fit(self, genomes, contexts, steps=20_000, batch=256, lr=1e-3, seed=0) -> TrainingLog:
         self.scaler = Standardizer.fit(genomes)

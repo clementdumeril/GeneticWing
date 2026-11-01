@@ -66,6 +66,8 @@ def _init_worker(vae_state, cfg):
                   safe=LatentPlanner(vae, glider, cfg["search_budget"], cl_margin=0.8))
     if cfg.get("flow"):
         _STATE["fast"] = DistilledPlanner(vae, glider, load_distilled(cfg["flow"], c["latent_dim"]), 64)
+    if cfg.get("record"):  # keep every GA climb plan, to distill the GA on the states met in flight
+        _STATE["ga"].recorder = []
 
 
 def make_pilot(name: str):
@@ -82,6 +84,8 @@ def make_pilot(name: str):
 def run(job):
     instance, name = job
     task = xc_family(instance, distance=_STATE["cfg"]["distance"])
+    if _STATE["ga"].recorder is not None:
+        _STATE["ga"].recorder.clear()
     tic = time.perf_counter()
     f = fly_xc(task, make_pilot(name), autopilot=Autopilot(inner_wing_protection=_STATE["cfg"]["protect"]))
     rates = [(c["z1"] - c["z0"]) / max(c["t1"] - c["t0"], 1.0) for c in f.climbs]
@@ -91,6 +95,7 @@ def run(job):
         "climbs": f.climbs, "climb_rate": float(np.mean(rates)) if rates else None,
         "climb_time": float(sum(c["t1"] - c["t0"] for c in f.climbs)),
         "violated": f.violated, "stalled": f.stalled, "wall": time.perf_counter() - tic,
+        "records": list(_STATE["ga"].recorder) if name.startswith("ga") and _STATE["ga"].recorder is not None else [],
     }
 
 
@@ -135,6 +140,10 @@ def main() -> None:
     parser.add_argument("--pilots", nargs="+", default=list(DEFAULT_PILOTS), choices=PILOTS)
     parser.add_argument("--protect", type=float, default=0.9, help="inner-wing protection (fraction of stall), 0 = off")
     parser.add_argument("--flow", type=Path, help="generator distilled from the GA (phase6_distill.py), for the fast pilots")
+    parser.add_argument("--record", action="store_true",
+                        help="save every GA climb plan (context, aircraft state, latent point) to <out>/ga_inflight.npz")
+    parser.add_argument("--baseline", type=Path, help="crosscountry.json of an earlier run on the same tasks, "
+                        "whose pilots join the paired comparisons")
     parser.add_argument("--search-budget", type=int, default=1_000)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--depth", type=int, default=3)
@@ -144,7 +153,8 @@ def main() -> None:
     start = time.perf_counter()
 
     cfg = {"distance": args.distance, "search_budget": args.search_budget, "width": args.width, "depth": args.depth,
-           "protect": args.protect if args.protect > 0 else None, "flow": str(args.flow) if args.flow else None}
+           "protect": args.protect if args.protect > 0 else None, "flow": str(args.flow) if args.flow else None,
+           "record": args.record}
     if not args.flow and any(p.startswith("fast") for p in args.pilots):
         args.pilots = [p for p in args.pilots if not p.startswith("fast")]
         print("no --flow: the fast pilots are left out", flush=True)
@@ -161,8 +171,20 @@ def main() -> None:
             results.append(r)
             if k % 25 == 0:
                 print(f"[{time.perf_counter() - start:6.0f}s] {k + 1}/{len(jobs)}", flush=True)
+    records = [x for r in results for x in r.pop("records")]
+    if records:
+        np.savez(args.out / "ga_inflight.npz", context=np.array([x["context"] for x in records]),
+                 state=np.array([x["state"] for x in records]), x=np.array([x["x"] for x in records]),
+                 fitness=np.array([x["fitness"] for x in records]), cost=np.array([x["cost"] for x in records]))
+        print(f"{len(records)} GA climb plans saved to {args.out / 'ga_inflight.npz'}", flush=True)
     (args.out / "crosscountry.json").write_text(json.dumps(results, indent=1))
-    text = summarize(results, args.pilots)
+    pilots = list(args.pilots)
+    if args.baseline:  # earlier pilots on the same tasks, for the paired comparisons
+        tasks = set(range(args.first, args.first + args.tasks))
+        earlier = [r for r in json.loads(args.baseline.read_text()) if r["instance"] in tasks and r["pilot"] not in pilots]
+        results += earlier
+        pilots = [p for p in PILOTS if p in {r["pilot"] for r in earlier}] + pilots
+    text = summarize(results, pilots)
     (args.out / "crosscountry_summary.txt").write_text(text)
     print("\n" + text)
     print(f"done in {time.perf_counter() - start:.0f}s -> {args.out}")

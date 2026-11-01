@@ -12,6 +12,8 @@
 #   bash slurm/submit_all.sh closedloop   # phase 4: closed loop, turbulence, wrong belief
 #   bash slurm/submit_all.sh xc           # phase 5: 20 km cross-country, circling rule vs planned climbs
 #   bash slurm/submit_all.sh distill      # phase 6: the latent GA distilled into a fast generator
+#   bash slurm/submit_all.sh dagger       # phase 6, DAgger: GA climbs recorded in flight -> redistill -> fly
+#                                       # (after `distill` and the crosscountry_fast run)
 #                                       # (on the Savio strip run, $WORK/phase3_strip_v2)
 #                                       # (needs the strip dataset and command VAE in $WORK/phase3_strip)
 set -euo pipefail
@@ -20,7 +22,7 @@ if [ "${1:-all}" = "strip" ] || [ "${1:-all}" = "sensitivity" ]; then
     # Another folder keeps an earlier strip run:  PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh strip
     export STRIP=1 PHASE3_NAME=${PHASE3_NAME:-phase3_strip}
 fi
-if [ "${1:-all}" = "closedloop" ] || [ "${1:-all}" = "xc" ] || [ "${1:-all}" = "distill" ]; then
+if [ "${1:-all}" = "closedloop" ] || [ "${1:-all}" = "xc" ] || [ "${1:-all}" = "distill" ] || [ "${1:-all}" = "dagger" ]; then
     export STRIP=1 PHASE3_NAME=${PHASE3_NAME:-phase3_strip_v2}
 fi
 source slurm/config.sh
@@ -50,6 +52,19 @@ submit() {  # sbatch wrapper that prints and returns the job id
 }
 
 n_sizes=${#TRAIN_SIZES[@]}
+if [ "${1:-all}" = "dagger" ]; then
+    for f in physics/command_vae_d16.pt distill/ga_train.npz crosscountry_fast/crosscountry.json; do
+        if [ ! -f "$data/$f" ]; then
+            echo "missing $data/$f: run 'submit_all.sh distill' and the crosscountry_fast run first" >&2
+            exit 1
+        fi
+    done
+    collect=$(DAGGER_STEP=collect submit "${cpu[@]}" --time="$TIME_DAGGER" --output="$logs/%x-%j.out" slurm/dagger.sbatch)
+    distill=$(DAGGER_STEP=distill submit "${cpu[@]}" --time="$TIME_DAGGER" --dependency=afterok:"$collect"         --output="$logs/%x-%j.out" slurm/dagger.sbatch)
+    fly=$(DAGGER_STEP=fly submit "${cpu[@]}" --time="$TIME_DAGGER" --dependency=afterok:"$distill"         --output="$logs/%x-%j.out" slurm/dagger.sbatch)
+    echo "DAgger: collect $collect -> distill $distill -> fly $fly (results in ${data}/dagger)"
+    exit 0
+fi
 if [ "${1:-all}" = "sensitivity" ] || [ "${1:-all}" = "closedloop" ] || [ "${1:-all}" = "xc" ] || [ "${1:-all}" = "distill" ]; then
     for f in dataset.npz theta.npy physics/command_vae_d16.pt; do
         if [ ! -f "$data/$f" ]; then
