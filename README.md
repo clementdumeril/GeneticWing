@@ -571,8 +571,42 @@ keeping the best. A short search on top adds nothing. The plan of the design
 document holds in the end, in the order found: explore offline with a GA in a
 learned space, distill what it finds into a flow matching model, and in
 flight propose and verify. The generator is learned on S1 situations
-(180-320 m); the cross-country benchmark now flies it as the `fast` pilots
+(180-320 m); the cross-country benchmark flies it as the `fast` pilots
 (`--flow`), where climbs reach 600 m.
+
+### The generator in flight: a DAgger round
+
+Flown on the 64 tasks of 20 km, that first generator kept little of the GA's
+lead: climbs at 1.50 and 1.17 m/s (MacCready 0.5 and 1) against 2.08 and 2.07
+for the GA. It had learned level starts at 180-320 m, while a climb is
+replanned in a turn, up to 600 m, and its condition did not even hold the
+current bank. `bash slurm/submit_all.sh dagger` trains it on the states met in
+flight: the GA flies the tasks with every climb plan it wins recorded
+(situation, aircraft state, latent point; `phase5_crosscountry.py --record`,
+1,095 plans), the generator is retrained on those plus the 3,000 S1 solutions
+with the aircraft's bank, airspeed and C_L added to its condition
+(`phase6_distill.py --inflight`), and it flies the tasks again (25 minutes for
+the three steps).
+
+| Climbs (64 tasks of 20 km) | Mean climb | Speed | Battery | Time per plan |
+| --- | --- | --- | --- | --- |
+| Circling rule, MacCready 0.5 / 1 | 1.29 / 1.22 m/s | 24.9 / 28.3 km/h | 2.9 / 19.3 kJ | feedback law |
+| Latent GA, MacCready 0.5 / 1 | 2.08 / 2.07 m/s | 28.2 / 29.5 km/h | 2.9 / 4.7 kJ | about 13 s |
+| Generator distilled on S1 only | 1.50 / 1.17 m/s | 25.1 / 28.8 km/h | 4.2 / 20.2 kJ | 0.24 s |
+| **Generator after the DAgger round** | **2.23 / 2.20 m/s** | **28.5 / 30.2 km/h** | **2.9 / 4.7 kJ** | **0.24 s** |
+
+After one round the generator climbs as fast as the GA it imitates, and
+slightly faster (faster than the GA on 84 % and 77 % of the tasks, +0.4 and
++0.6 km/h, same battery), likely because it draws 64 verified candidates from
+thousands of GA solutions where the GA has 1,000 flights per plan in flight.
+At MacCready 1 it beats the motor's speed (30.2 against 29.2 km/h) on 13 times
+less battery, with no stall and no violation, and it is unchanged on the S1
+test situations (-5.72 against -4.88 for the teacher). The whole chain holds in
+simulated flight: a slow teacher, a command VAE with a physics decoder, a GA in
+its latent space that beats the teacher, a flow matching model distilling the
+GA, and a DAgger round on the states met in flight, for a 0.24 s planner that
+climbs 70 % faster than the circling rule. One run each; thermals are still
+known exactly on the 20 km tasks.
 
 ## Usage
 
