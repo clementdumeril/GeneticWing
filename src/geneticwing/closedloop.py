@@ -320,6 +320,43 @@ class PriorPlanner(_CommandPlanner):
         return self._to_world(ev, k, scenario, candidates[k])
 
 
+class DistilledPlanner(_CommandPlanner):
+    """The best of ``samples`` points from the generator distilled from the latent GA, flown in the belief.
+
+    ``flow`` is the :class:`~geneticwing.student.FlowMatchingStudent` of
+    ``scenarios/phase6_distill.py``: it samples points of the GA's unit box,
+    which the command VAE decodes. No search: about 0.2 s per plan.
+    """
+
+    def __init__(self, vae, cfg, flow, samples: int = 64, cl_margin: float | None = None):
+        super().__init__(vae, cfg)
+        self.flow, self.samples, self.cl_margin = flow, samples, cl_margin
+
+    def __call__(self, scenario: SoaringScenario, rng: np.random.Generator, start: Start | None = None) -> Plan:
+        from geneticwing.latent import to_latent
+        from geneticwing.physvae import fly
+
+        context, cfg, problem = self._problem(scenario)
+        decoder, rest, z_rest = self._in_flight(start, context, cfg)
+        z = to_latent(self.flow.sample(context, self.samples, rng=rng))
+        candidates = decoder.decode(z if z_rest is None else np.vstack([z, z_rest]), context)
+        if rest is not None:
+            candidates = np.vstack([candidates, rest])
+        ev = fly(candidates, context, cfg, problem)
+        k = int(np.argmin(ev.fitness))
+        return self._to_world(ev, k, scenario, candidates[k])
+
+
+def load_distilled(path, latent_dim: int, context_dim: int = 6):
+    """The distilled generator saved by ``phase6_distill.py`` (``distilled_flow.pt``)."""
+    import torch
+
+    from geneticwing.student import FlowMatchingStudent
+
+    state = torch.load(path, weights_only=False, map_location="cpu")
+    return FlowMatchingStudent.from_state(state, latent_dim, context_dim, state.get("width", 256), state.get("depth", 3))
+
+
 # -- the loop ---------------------------------------------------------------------------------
 @dataclass(frozen=True)
 class LoopConfig:

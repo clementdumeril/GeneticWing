@@ -199,6 +199,7 @@ All numbers here are on the same 77 held-out situations; the teacher averages
 | `geneticwing.crosscountry` | Phase 5: 20 km tasks through a thermal field, MacCready tactician, planned climbs |
 | `scenarios/phase5_crosscountry.py` | The cross-country benchmark: circling rule against GA and prior climbs |
 | `scenarios/phase4_view.py`, `scenarios/phase5_view.py` | Self-contained 3D pages of flights (`docs/viewer/`) |
+| `scenarios/phase6_distill.py` | Phase 6: the latent GA distilled into a fast generator (flow matching) |
 | `scenarios/report_figures.py` | The figures below, from the folder copied back from Savio |
 
 ### The student's scaling curve (H2)
@@ -545,6 +546,33 @@ python scenarios/phase5_crosscountry.py --vae D/physics/command_vae_d16.pt --tas
 python scenarios/phase5_view.py --vae D/physics/command_vae_d16.pt   # 3D page of one task, both pilots
 bash slurm/submit_all.sh xc   # on Savio, with the strip run's command VAE
 ```
+
+## Phase 6: distilling the search
+
+The latent GA beats the teacher but takes 13 s per plan. `phase6_distill.py`
+amortizes it, as expert iteration does: the GA (3,000 flights) solves 3,000
+training situations of the Savio strip run, a conditional flow matching model
+learns its best points of the command VAE's latent box from the situation's
+context, and the generator's samples are decoded and flown like any other
+candidate (`bash slurm/submit_all.sh distill`, one node, about 30 minutes).
+
+| Method (65 test situations, teacher -4.88) | Solved | Mean cost | Gap | Time per plan |
+| --- | --- | --- | --- | --- |
+| 64 samples of the VAE prior, best kept | 100 % | -4.64 | +0.24 | 0.24 s |
+| 1 sample of the distilled generator | 94 % | -3.52 | +1.30 | 0.14 s |
+| **64 samples of the distilled generator, best kept** | 100 % | **-5.72** | **-0.85** | **0.24 s** |
+| Distilled samples + a short GA (300 flights) | 100 % | -5.59 | -0.71 | 1.4 s |
+| Latent GA (3,000 flights), the target | 100 % | -5.66 | -0.78 | 13.4 s |
+
+The distilled generator matches the GA at 57 times less compute and beats the
+teacher by 0.85 in the time the VAE prior takes. One sample is not enough:
+what works is proposing 64 candidates, checking them in the simulator and
+keeping the best. A short search on top adds nothing. The plan of the design
+document holds in the end, in the order found: explore offline with a GA in a
+learned space, distill what it finds into a flow matching model, and in
+flight propose and verify. The generator is learned on S1 situations
+(180-320 m); the cross-country benchmark now flies it as the `fast` pilots
+(`--flow`), where climbs reach 600 m.
 
 ## Usage
 

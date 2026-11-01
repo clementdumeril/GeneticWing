@@ -10,6 +10,8 @@ Every task of :func:`geneticwing.crosscountry.xc_family` is flown by:
 * safe0.5, safe1 - the GA climbs searched with a stall margin of 20 % (C_L and every
                 wing section at most 0.8 of C_L max, against 0.9 for the others)
 * prior0.5    - the same, with the best of 64 prior samples instead of the GA
+* fast0.5, fast1 - the climbs flown by the generator distilled from the GA
+                (``--flow``, from ``phase6_distill.py``): best of 64 samples, about 0.2 s per plan
 
 ``--protect`` (default 0.9) gives every pilot's autopilot an inner-wing
 protection: the C_L command is capped so that no wing section passes that
@@ -36,7 +38,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 from geneticwing.aircraft import SBXC_APPROX  # noqa: E402
-from geneticwing.closedloop import LatentPlanner, PriorPlanner  # noqa: E402
+from geneticwing.closedloop import DistilledPlanner, LatentPlanner, PriorPlanner, load_distilled  # noqa: E402
 from geneticwing.crosscountry import (  # noqa: E402
     Autopilot,
     MacCreadyPilot,
@@ -48,8 +50,8 @@ from geneticwing.crosscountry import (  # noqa: E402
 from geneticwing.latent import ConditionalVAE  # noqa: E402
 from geneticwing.torchsim import SimConfig  # noqa: E402
 
-PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "safe0.5", "safe1", "prior0.5")
-DEFAULT_PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "safe0.5", "safe1")
+PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "safe0.5", "safe1", "prior0.5", "fast0.5", "fast1")
+DEFAULT_PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "fast0.5", "fast1")
 _STATE: dict = {}
 
 
@@ -62,6 +64,8 @@ def _init_worker(vae_state, cfg):
     glider = SimConfig(SBXC_APPROX, dt=0.4, knots=61, cl_limit=0.75, bank_max_deg=38.0, load_max=2.1, thrust_max=1e-6)
     _STATE.update(cfg=cfg, ga=LatentPlanner(vae, glider, cfg["search_budget"]), prior=PriorPlanner(vae, glider, 64),
                   safe=LatentPlanner(vae, glider, cfg["search_budget"], cl_margin=0.8))
+    if cfg.get("flow"):
+        _STATE["fast"] = DistilledPlanner(vae, glider, load_distilled(cfg["flow"], c["latent_dim"]), 64)
 
 
 def make_pilot(name: str):
@@ -105,7 +109,8 @@ def summarize(results, pilots) -> str:
             f"{100 * np.mean([not r['violated'] for r in rows]):>12.0f}%{100 * np.mean([r['stalled'] for r in rows]):>7.0f}%"
         )
     # Paired comparison on the same tasks: the planned climbs against the circling rule at the same setting.
-    for planned, rule in (("ga0.5", "mc0.5"), ("ga1", "mc1"), ("safe0.5", "mc0.5"), ("safe1", "mc1"),
+    for planned, rule in (("ga0.5", "mc0.5"), ("ga1", "mc1"), ("fast0.5", "mc0.5"), ("fast1", "mc1"),
+                          ("fast0.5", "ga0.5"), ("fast1", "ga1"), ("safe0.5", "mc0.5"), ("safe1", "mc1"),
                           ("prior0.5", "mc0.5")):
         a = {r["instance"]: r for r in results if r["pilot"] == planned}
         b = {r["instance"]: r for r in results if r["pilot"] == rule}
@@ -129,6 +134,7 @@ def main() -> None:
     parser.add_argument("--distance", type=float, default=20_000.0)
     parser.add_argument("--pilots", nargs="+", default=list(DEFAULT_PILOTS), choices=PILOTS)
     parser.add_argument("--protect", type=float, default=0.9, help="inner-wing protection (fraction of stall), 0 = off")
+    parser.add_argument("--flow", type=Path, help="generator distilled from the GA (phase6_distill.py), for the fast pilots")
     parser.add_argument("--search-budget", type=int, default=1_000)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--depth", type=int, default=3)
@@ -138,9 +144,13 @@ def main() -> None:
     start = time.perf_counter()
 
     cfg = {"distance": args.distance, "search_budget": args.search_budget, "width": args.width, "depth": args.depth,
-           "protect": args.protect if args.protect > 0 else None}
+           "protect": args.protect if args.protect > 0 else None, "flow": str(args.flow) if args.flow else None}
+    if not args.flow and any(p.startswith("fast") for p in args.pilots):
+        args.pilots = [p for p in args.pilots if not p.startswith("fast")]
+        print("no --flow: the fast pilots are left out", flush=True)
     state = torch.load(args.vae, weights_only=False, map_location="cpu")
-    slow_first = {"ga1": 0, "safe1": 1, "ga0.5": 2, "safe0.5": 3, "prior0.5": 4, "mc0.5": 5, "mc1": 6, "motor": 7}
+    slow_first = {"ga1": 0, "safe1": 1, "ga0.5": 2, "safe0.5": 3, "fast1": 4, "fast0.5": 5, "prior0.5": 6,
+                  "mc0.5": 7, "mc1": 8, "motor": 9}
     jobs = sorted(((i, p) for i in range(args.first, args.first + args.tasks) for p in args.pilots),
                   key=lambda j: slow_first[j[1]])
     print(f"{args.tasks} tasks of {args.distance / 1000:g} km x {len(args.pilots)} pilots = {len(jobs)} flights, "
