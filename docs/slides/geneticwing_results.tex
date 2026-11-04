@@ -38,7 +38,7 @@
 
 \begin{frame}
   \titlepage
-  \centering\fine{Toutes les valeurs viennent des runs du dépôt (README, Savio et PC de calcul). Coût : énergie nette dépensée, normalisée par le vol en palier au moteur ; $1$ = vol au moteur, $<0$ = énergie gagnée sur l'air.}
+  \centering\fine{Toutes les valeurs viennent des runs du dépôt (README, cluster Slurm et PC de calcul). Coût : énergie nette dépensée, normalisée par le vol en palier au moteur ; $1$ = vol au moteur, $<0$ = énergie gagnée sur l'air.}
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@
     \draw[arr] (sim) -- (teach); \draw[arr] (teach) -- (data); \draw[arr] (data) -- (vae); \draw[arr] (vae) -- (ga);
     \draw[arr] (ga) -- (cl); \draw[arr] (cl) -- (xc); \draw[arr] (lim) -- (xc);
     \node[lab, above=0.05cm of teach] {phase 2};
-    \node[lab, above=0.05cm of data] {Savio};
+    \node[lab, above=0.05cm of data] {cluster};
     \node[lab, above=0.05cm of vae] {phase 3};
     \node[lab, below=0.05cm of cl] {phase 4};
     \node[lab, below=0.05cm of xc] {phase 5};
@@ -148,7 +148,7 @@
     Données & contexte dans le repère de cap (invariance par rotation), miroir gauche/droite exact, marges du professeur & \\
     \bottomrule
   \end{tabular}\par\medskip
-  \fine{Entraînement : CPU (PC) et GPU A40 (Savio) ; 20\,000 pas ; $\beta$-VAE avec $\beta=0{,}1$ ; décodeur 3$\times$512.}
+  \fine{Entraînement : CPU (PC) et GPU A40 (cluster) ; 20\,000 pas ; $\beta$-VAE avec $\beta=0{,}1$ ; décodeur 3$\times$512.}
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -227,18 +227,18 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-\begin{frame}{Phase 3b : à l'échelle (Savio, 15\,080 situations)}
+\begin{frame}{Phase 3b : à l'échelle (cluster, 15\,080 situations)}
   \begin{columns}[T]
     \column{0.5\linewidth}
     \centering
-    \includegraphics[width=\linewidth]{savio_scaling.png}
+    \includegraphics[width=\linewidth]{scaling.png}
     \column{0.48\linewidth}
     \small
     \begin{itemize}
       \item Le professeur résout 15\,080 situations (27\,649 solutions) sur 21 n\oe uds de 32 c\oe urs.
       \item \textbf{Courbe d'échelle} : plus de données aide jusqu'à $\approx$3\,000 situations, puis l'écart plafonne. Au-delà, la limite est le modèle, pas les données.
       \item H3 tient à toutes les tailles : la régression résout au plus 12\,\%.
-      \item Sur les 77 situations de test Savio : professeur $-5{,}24$, loi réactive $-3{,}57$, flow matching + NLP $-3{,}54$.
+      \item Sur les 77 situations de test du cluster : professeur $-5{,}24$, loi réactive $-3{,}57$, flow matching + NLP $-3{,}54$.
     \end{itemize}
   \end{columns}
 \end{frame}
@@ -266,7 +266,7 @@
     \end{itemize}
     \column{0.41\linewidth}
     \centering
-    \includegraphics[width=\linewidth]{savio_methods.png}
+    \includegraphics[width=\linewidth]{methods.png}
   \end{columns}
 \end{frame}
 
@@ -341,7 +341,7 @@
     \small Une orbite \emph{plus rapide} (pas plus large) baisse le $C_L$ et rend une marge à l'aile intérieure. Professeur à 2 graines : \good{39\,\% $\to$ 17\,\%} non résolues ; l'orbite rapide gagne 83\,\% des trajectoires.
     \column{0.48\linewidth}
     \scriptsize
-    \textbf{Réentraîné, Savio, 15\,080 situations, 65 tests}\par\smallskip
+    \textbf{Réentraîné, cluster, 15\,080 situations, 65 tests}\par\smallskip
     \begin{tabular}{@{}lccc@{}}
       \toprule
       Méthode & $d=8$ & $d=16$ & $d=32$ \\ \midrule
@@ -393,7 +393,7 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-\begin{frame}{Phase 4 : résultats (Savio, 65 situations $\times$ 4 conditions $\times$ 6 méthodes, 60\,s)}
+\begin{frame}{Phase 4 : résultats (cluster, 65 situations $\times$ 4 conditions $\times$ 6 méthodes, 60\,s)}
   \begin{columns}[T]
     \column{0.6\linewidth}
     \scriptsize
@@ -439,7 +439,7 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-\begin{frame}{Phase 5 : résultats (Savio, 64 tâches de 20\,km, autopilote protégé)}
+\begin{frame}{Phase 5 : résultats (cluster, 64 tâches de 20\,km, autopilote protégé)}
   \scriptsize
   \centering
   \begin{tabular}{@{}lccccc@{}}
@@ -462,7 +462,7 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-\begin{frame}{Phase 6 : distiller la recherche (Savio, 65 situations de test)}
+\begin{frame}{Phase 6 : distiller la recherche (cluster, 65 situations de test)}
   \begin{columns}[T]
     \column{0.58\linewidth}
     \scriptsize
@@ -553,7 +553,7 @@
 \begin{frame}{Moyens de calcul}
   \small
   \begin{itemize}
-    \item \textbf{Savio (UC Berkeley, compte ic\_piml)} : tableaux SLURM de 21 n\oe uds de 32 c\oe urs pour le professeur (15\,080 situations en $\approx$15\,min), GPU A40 pour les élèves, un n\oe ud par étude (sensibilité, boucle fermée, 20\,km).
+    \item \textbf{Cluster Slurm} : tableaux SLURM de 21 n\oe uds de 32 c\oe urs pour le professeur (15\,080 situations en $\approx$15\,min), GPU A40 pour les élèves, un n\oe ud par étude (sensibilité, boucle fermée, 20\,km).
     \item \textbf{PC de calcul (qltus1, qltus2)} : 3\,080 situations en 1\,h\,15 ; Python 3.14 environ 4 fois plus rapide par c\oe ur que le gros PC.
     \item \textbf{Code} : NumPy/SciPy pour l'optimisation et la simulation, PyTorch pour les élèves ; 69 tests ; dépôt public \texttt{github.com/clementdumeril/GeneticWing}.
     \item \textbf{Visualiseurs 3D} : vols de 60\,s autour d'un thermique, et vol de 20\,km (pages autonomes dans \texttt{docs/viewer}).
