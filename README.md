@@ -5,7 +5,13 @@
 locally) · Related: [Fixed-Wing](https://github.com/clementdumeril/Fixed-Wing),
 [WingJEPA](https://github.com/clementdumeril/WingJEPA)
 
-![GeneticWing overview: physics models feed RK4 and PyTorch simulators; a teacher, a command VAE, a latent GA and a distilled flow matching generator plan the climbs of 20 km cross-country flights](docs/figures/overview.png)
+![The simulated sailplane circling up a drifting thermal along one latent-GA plan, path coloured by climb rate](docs/figures/flight_thermal.gif)
+
+*One 60 s climb in a drifting thermal, simulated: a single latent-GA plan (dashed) flown open loop in calm air.*
+
+![GeneticWing overview: a teacher, a command VAE, a latent GA and a distilled flow matching generator plan the climbs of 20 km cross-country flights](docs/figures/overview.png)
+
+*Overview; shaded boxes are learned models, arrows say what is passed on.*
 
 A simulated SB-XC sailplane plans its thermal climbs with a flow matching generator distilled from a genetic search
 over a learned command space. On 64 cross-country tasks of 20 km it climbs at 2.23 m/s against 1.29 m/s for a
@@ -23,10 +29,10 @@ it on the states met in flight. A MacCready tactician picks the thermals; the pl
 
 ## Results
 
-![One 20 km task flown with the circling rule and with planned climbs](docs/figures/xc_flight_20km.png)
+![One 20 km task flown with the circling rule and with climbs planned by the latent GA](docs/figures/flight_xc20km.gif)
 
-*One 20 km task, same tactician: the circling rule (grey) and climbs planned by the latent GA (green), motor off in
-the climbs. Top: path and the drifting thermals; bottom: altitude against the distance flown toward the goal.*
+*One 20 km task at MacCready 1, climbs planned by the latent GA, circling rule in grey
+([whole task](docs/figures/xc_flight_20km.png), [data](docs/IMPLEMENTATION.md#figures)).*
 
 | Climbs (64 tasks of 20 km, MacCready 0.5 / 1) | Mean climb (m/s) | Speed (km/h) | Battery (kJ) |
 | --- | --- | --- | --- |
@@ -61,6 +67,7 @@ The phase 3 to 6 studies run on a Slurm cluster: set the account and partitions 
 | --- | --- |
 | `src/geneticwing/` | flat planning core, aircraft and strip wing, wind models, simulators, GA and NLP planners, VAEs, students, cross-country pilot |
 | `scenarios/` | one script per phase (`s0_glide.py` to `phase6_distill.py`), figures, 3D viewers |
+| `scripts/` | `make_flight_gifs.py`: the flight GIFs from `docs/data/`, the viewer flights of `phase4_view.py` and `phase5_view.py` |
 | `slurm/` | cluster jobs, chained by `submit_all.sh` |
 | `tests/` | 69 tests |
 | `docs/` | [results](docs/RESULTS.md), [implementation](docs/IMPLEMENTATION.md), figures, slides, viewers |
