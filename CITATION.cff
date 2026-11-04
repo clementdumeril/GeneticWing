@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "GeneticWing: soaring trajectory planning for a fixed-wing UAV with genetic search in a learned latent space"
+authors:
+  - family-names: Dumeril
+    given-names: Clément
+    affiliation: "University of California, Berkeley"
+license: MIT
+repository-code: "https://github.com/clementdumeril/GeneticWing"
+url: "https://clement.dumeril.net"
+keywords:
+  - fixed-wing UAV
+  - soaring
+  - trajectory planning
+  - genetic algorithm
+  - flow matching
+  - differential flatness
