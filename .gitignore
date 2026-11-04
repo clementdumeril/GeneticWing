@@ -17,3 +17,8 @@ docs/slides/*.toc
 docs/slides/*.fls
 docs/slides/*.fdb_latexmk
 docs/slides/*.vrb
+
+# local editor notes and secrets
+AGENTS.md
+.cursor/
+.env
