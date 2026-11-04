@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time setup on a Savio login node, from the repository root:
+# One-time setup on a cluster login node, from the repository root:
 #   bash slurm/setup_env.sh
 # Creates a virtual environment in scratch and installs GeneticWing with PyTorch.
 set -euo pipefail

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Print what slurm/config.sh needs: accounts, partitions, QoS, GPU types, cores per node.
-# Run on a Savio login node:  bash slurm/check_savio.sh
+# Run on a cluster login node:  bash slurm/check_cluster.sh
 set -u
 
 echo "=== Your accounts, partitions and QoS (copy a matching line into config.sh) ==="
