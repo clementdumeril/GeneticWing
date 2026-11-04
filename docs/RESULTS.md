@@ -1,7 +1,7 @@
 # GeneticWing: phase-by-phase results
 
 The full record of the project, phase by phase, moved here from the top-level README (which keeps the summary).
-Numbers come from the runs described in each section; the raw outputs of the Savio runs stay on the cluster
+Numbers come from the runs described in each section; the raw outputs of the cluster runs stay on the cluster
 (`/global/scratch/users/$USER/geneticwing/`), and the small summaries that are committed are in
 [`figures/`](figures/). Costs: net onboard energy over the horizon (motor energy minus the specific energy stored),
 normalized by level cruise on the motor; `1` means cruising on the motor, `< 0` means net energy gained from the air.
@@ -173,9 +173,9 @@ Caveats: about 1.3k teacher solutions for 87 genes is little data; CPU
 training; point-mass model; the law's time is a simulation cost, as a feedback
 law it runs in microseconds.
 
-## Phase 3 at scale (Savio) and the GA in a learned space
+## Phase 3 at scale (Slurm cluster) and the GA in a learned space
 
-On Savio (see below), the teacher solved 15,080 situations (27,649 solutions).
+On a Slurm cluster (see below), the teacher solved 15,080 situations (27,649 solutions).
 All numbers here are on the same 77 held-out situations; the teacher averages
 -5.24 there.
 
@@ -195,11 +195,11 @@ All numbers here are on the same 77 held-out situations; the teacher averages
 | `scenarios/phase5_crosscountry.py` | The cross-country benchmark: circling rule against GA and prior climbs |
 | `scenarios/phase4_view.py`, `scenarios/phase5_view.py` | Self-contained 3D pages of flights (`docs/viewer/`) |
 | `scenarios/phase6_distill.py` | Phase 6: the latent GA distilled into a fast generator (flow matching) |
-| `scenarios/report_figures.py` | The figures below, from the folder copied back from Savio |
+| `scenarios/report_figures.py` | The figures below, from the folder copied back from the cluster |
 
 ### The student's scaling curve (H2)
 
-![Scaling](figures/savio_scaling.png)
+![Scaling](figures/scaling.png)
 
 More data helps up to about 3,000 situations, then the gap plateaus (one run
 per size; 10k versus all is within noise). Beyond that point the limit is the
@@ -243,7 +243,7 @@ the teacher's own margins, so every method faces the same feasible set.
 | **Latent GA, physics VAE** (d = 16) | 100 % | **-6.06** | **-0.82** | 12.6 s |
 | Latent GA, physics VAE, + NLP (d = 16) | 100 % | -6.02 | -0.78 | 14.2 s |
 
-![Methods](figures/savio_methods.png)
+![Methods](figures/methods.png)
 
 - The round trip goes from 20 % to 100 % feasible, and every method using
   this decoder jumps from about -3.6 to between -5 and -6.
@@ -328,7 +328,7 @@ the point mass). The test set keeps the 49 situations of 80 the teacher solves.
 
 Trained on strip-wing trajectories, the prior goes from 66 % solved at -1.23
 to 100 % at -4.73, and the latent GA beats the teacher again, by 1.05 units at
-d = 16 (0.82 for the point mass on Savio). The test set is the situations the
+d = 16 (0.82 for the point mass at cluster scale). The test set is the situations the
 teacher solves, so the comparison says nothing about the other 40 %.
 
 Why the teacher fails (`phase3_unsolved.py`, 128 unsolved situations, 31 of
@@ -362,7 +362,7 @@ times the teacher's time.
 
 The seed law is tuned on the point-mass wing, also for `--strip` datasets.
 
-### Strip wing at Savio scale (reference)
+### Strip wing at cluster scale (reference)
 
 `PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh strip`: the two-seed
 teacher on the 15,080 situations, 21 nodes for about 15 minutes, then the
@@ -381,7 +381,7 @@ remain, where the teacher averages -4.88.
 
 With seven times the data and a stronger teacher, the latent GA still beats
 the teacher by 0.84 at d = 32 (0.82 at d = 16), the same margin as for the
-point mass on Savio (0.82). The 1.05 of the 3,080-situation run came from an
+point mass at cluster scale (0.82). The 1.05 of the 3,080-situation run came from an
 easier test set and a weaker teacher. The command representation itself costs
 0.43 (the teacher's commands flown), which bounds what the prior alone can do.
 
@@ -390,7 +390,7 @@ easier test set and a weaker teacher. The command representation itself costs
 The SB-XC's C_D0, C_L max and mass are estimates. `submit_all.sh sensitivity`
 scales one of them by 0.8 or 1.2 for every method (teacher re-solved with both
 seeds, the strip wing's section stall following C_L max); the command VAE
-stays the one trained on the nominal airframe. Savio strip run, 65 test
+stays the one trained on the nominal airframe. Cluster strip run, 65 test
 situations, d = 16:
 
 | Airframe | Teacher (solved) | 64 prior samples | Physics latent GA | Gap (GA - teacher) |
@@ -413,7 +413,7 @@ transfer: 1.5 to 1.8 behind the teacher when the stall margin shrinks. The
 number to measure on the real airframe is therefore its wing loading and
 C_L max, and a decoder conditioned on them would cover several loadings.
 With the one-seed teacher, the same runs gave gaps 0.1 larger
-(`phase3_strip_v2/sensitivity_one_seed/` on Savio).
+(`phase3_strip_v2/sensitivity_one_seed/` on the cluster).
 Tuned under the strip wing, the GA on the law's parameters converged to orbits
 the NLP could not repair: on 16 test situations, 3 feasible at +0.45 against
 13 feasible at -5.41 with the point-mass law. The first strip run used that
@@ -427,7 +427,7 @@ search on the physics decoder harvested (costs three times better than the
 teacher). All simulators now use RK4 (`geneticwing.simulation.rk4_step`); a
 steady glide turn loses exactly the polar's sink, even with 0.4 s steps.
 Earlier results affected: the reactive law's online cost was about 4 % too
-optimistic (on the 77 Savio situations: -3.73 with Euler, -3.57 with RK4).
+optimistic (on the 77 cluster test situations: -3.73 with Euler, -3.57 with RK4).
 Costs of the teacher, planners, students and position VAE come from the
 exact flat evaluation and are unchanged.
 
@@ -466,7 +466,7 @@ condition every method flies the same gusts and the same wrong belief.
 
 ```bash
 python scenarios/phase4_closed_loop.py --data D/dataset.npz --theta D/theta.npy --vae D/physics/command_vae_d16.pt
-bash slurm/submit_all.sh closedloop   # on Savio, on the strip run (phase3_strip_v2)
+bash slurm/submit_all.sh closedloop   # on the cluster, on the strip run (phase3_strip_v2)
 ```
 
 First runs on two situations (small budgets) show replanning at least as good
@@ -492,7 +492,7 @@ planner, in 60 s blocks flown by the closed loop and cut at the cloud base;
 with `motor_in_climbs=False` the climbs are pure soaring, so only the circling
 is compared.
 
-Savio, 64 tasks of 20 km, every pilot on the same tasks (GA: 1,000 flights
+Cluster runs, 64 tasks of 20 km, every pilot on the same tasks (GA: 1,000 flights
 per 60 s block, motor off in its climbs):
 
 | Pilot | Arrived | Battery | Speed | Mean climb | Flights without stall |
@@ -539,14 +539,14 @@ few searches to find the safe circles.)
 ```bash
 python scenarios/phase5_crosscountry.py --vae D/physics/command_vae_d16.pt --tasks 64
 python scenarios/phase5_view.py --vae D/physics/command_vae_d16.pt   # 3D page of one task, both pilots
-bash slurm/submit_all.sh xc   # on Savio, with the strip run's command VAE
+bash slurm/submit_all.sh xc   # on the cluster, with the strip run's command VAE
 ```
 
 ## Phase 6: distilling the search
 
 The latent GA beats the teacher but takes 13 s per plan. `phase6_distill.py`
 amortizes it, as expert iteration does: the GA (3,000 flights) solves 3,000
-training situations of the Savio strip run, a conditional flow matching model
+training situations of the cluster strip run, a conditional flow matching model
 learns its best points of the command VAE's latent box from the situation's
 context, and the generator's samples are decoded and flown like any other
 candidate (`bash slurm/submit_all.sh distill`, one node, about 30 minutes).
@@ -614,10 +614,10 @@ python scenarios/phase3_dataset.py --train 600 --test 80
 python scenarios/phase3_student.py --steps 20000
 python scenarios/phase3_latent.py --data results/phase3/dataset.npz
 python scenarios/phase3_physics.py --data results/phase3/dataset.npz --margins
-python scenarios/report_figures.py --src results/savio_phase3
+python scenarios/report_figures.py --src results/cluster_phase3
 ```
 
-## Running phase 3 at scale on Savio (Berkeley)
+## Running phase 3 at scale on a Slurm cluster
 
 The teacher's dataset is the expensive part (about 20 core-seconds per
 instance) and splits into independent shards; the students train on GPU.
@@ -631,7 +631,7 @@ On a login node, once:
 ```bash
 git clone https://github.com/clementdumeril/GeneticWing.git
 cd GeneticWing
-bash slurm/check_savio.sh      # prints your accounts, partitions, QoS and GPU types
+bash slurm/check_cluster.sh      # prints your accounts, partitions, QoS and GPU types
 nano slurm/config.sh           # set ACCOUNT, the CPU/GPU partitions and QoS, the Python module
 bash slurm/setup_env.sh        # venv in /global/scratch/users/$USER/geneticwing
 ```
@@ -646,7 +646,7 @@ bash slurm/submit_all.sh latent    # latent GA (position VAE)
 bash slurm/submit_all.sh physics   # latent GA with the physics decoder
 bash slurm/submit_all.sh strip     # strip wing: teacher re-solved, then the physics decoder (phase3_strip/)
 bash slurm/submit_all.sh sensitivity  # SB-XC polar +-20 %, on the strip comparison (dataset and VAE in phase3_strip/)
-PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh sensitivity  # the same on the Savio strip run
+PHASE3_NAME=phase3_strip_v2 bash slurm/submit_all.sh sensitivity  # the same on the earlier strip run
 ```
 
 Results land in `/global/scratch/users/$USER/geneticwing/phase3/students/n_<size>/`

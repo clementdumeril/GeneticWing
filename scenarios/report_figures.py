@@ -1,14 +1,14 @@
-"""Figures of the Savio phase 3 results, for the README.
+"""Figures of the cluster phase 3 results.
 
-Reads the folder copied from Savio (``results/savio_phase3``: students/,
+Reads the folder copied back from the cluster (``results/cluster_phase3``: students/,
 latent/, physics/ and law_rk4.json) and writes two PNGs to ``docs/figures``:
 
-* ``savio_scaling.png`` - the flow-matching student's gap to the teacher
+* ``scaling.png`` - the flow-matching student's gap to the teacher
   against the number of training situations;
-* ``savio_methods.png`` - net energy gain of every method on the same 77 test
+* ``methods.png`` - net energy gain of every method on the same 77 test
   situations.
 
-Run: ``python scenarios/report_figures.py [--src results/savio_phase3]``
+Run: ``python scenarios/report_figures.py [--src results/cluster_phase3]``
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def scaling(src: Path, out: Path) -> None:
     ax.set_title("More data helps the student up to about 3,000 situations, then plateaus",
                  loc="left", fontsize=11, color=INK)
     ax.legend(frameon=False, fontsize=9, loc="upper right")
-    fig.savefig(out / "savio_scaling.png", dpi=150)
+    fig.savefig(out / "scaling.png", dpi=150)
     plt.close(fig)
 
 
@@ -101,7 +101,7 @@ def methods(src: Path, out: Path) -> None:
     ax.set_xlim(0, 7.2)
     fig.suptitle("With the physics decoder, the latent GA beats the teacher (77 test situations)",
                  x=0.01, ha="left", fontsize=11, color=INK)
-    fig.savefig(out / "savio_methods.png", dpi=150)
+    fig.savefig(out / "methods.png", dpi=150)
     plt.close(fig)
 
 
@@ -131,14 +131,14 @@ def turn_limits(out: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--src", type=Path, default=Path("results/savio_phase3"))
+    parser.add_argument("--src", type=Path, default=Path("results/cluster_phase3"))
     parser.add_argument("--out", type=Path, default=Path("docs/figures"))
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     scaling(args.src, args.out)
     methods(args.src, args.out)
     turn_limits(args.out)
-    print(f"wrote savio_scaling.png, savio_methods.png and turn_limits.png to {args.out}")
+    print(f"wrote scaling.png, methods.png and turn_limits.png to {args.out}")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Submit the whole phase 3 pipeline on Savio, chained by dependencies:
+# Submit the whole phase 3 pipeline on a Slurm cluster, chained by dependencies:
 #   law (1 node) -> teacher shards (N_SHARDS + 1 nodes) -> merge -> students (1 GPU per size)
 # From the repository root on a login node:
 #   bash slurm/submit_all.sh            # everything
@@ -14,7 +14,7 @@
 #   bash slurm/submit_all.sh distill      # phase 6: the latent GA distilled into a fast generator
 #   bash slurm/submit_all.sh dagger       # phase 6, DAgger: GA climbs recorded in flight -> redistill -> fly
 #                                       # (after `distill` and the crosscountry_fast run)
-#                                       # (on the Savio strip run, $WORK/phase3_strip_v2)
+#                                       # (on the cluster strip run, $WORK/phase3_strip_v2)
 #                                       # (needs the strip dataset and command VAE in $WORK/phase3_strip)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -28,7 +28,7 @@ fi
 source slurm/config.sh
 
 if [[ "$ACCOUNT" == *CHANGEME* ]]; then
-    echo "Edit slurm/config.sh first (ACCOUNT, partitions, QoS): see bash slurm/check_savio.sh" >&2
+    echo "Edit slurm/config.sh first (ACCOUNT, partitions, QoS): see bash slurm/check_cluster.sh" >&2
     exit 1
 fi
 

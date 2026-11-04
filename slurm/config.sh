@@ -1,23 +1,23 @@
-# GeneticWing on Savio: the only file to edit.
-# Fill the values from the output of  bash slurm/check_savio.sh  (run on a login node).
+# GeneticWing on a Slurm cluster: the only file to edit.
+# Fill the values from the output of  bash slurm/check_cluster.sh  (run on a login node).
 
 # --- Account and partitions -------------------------------------------------
 ACCOUNT="ic_piml"
 
 # CPU nodes, for the teacher (whole nodes, all cores used by one job).
-# Savio bills the whole node, but SLURM only gives the job the cores it asks
+# The cluster bills the whole node, but SLURM only gives the job the cores it asks
 # for: without CPU_CORES the job sees 1 core and runs 32 times slower.
 CPU_PARTITION="savio3"
 CPU_QOS="savio_normal"
-CPU_CORES=32                     # cores per savio3 node (check_savio.sh, CPUS column)
+CPU_CORES=32                     # cores per node of CPU_PARTITION (check_cluster.sh, CPUS column)
 
 # Serial jobs (law tuning, merge) on a partition billed per core, not per node.
 SERIAL_PARTITION="savio3_htc"
 SERIAL_QOS="savio_normal"
 SERIAL_CORES=1
 
-# GPU nodes, for the students. The QoS and the GPU type go together on Savio:
-# take a matching pair from check_savio.sh (examples: A40 / a40_gpu3_normal,
+# GPU nodes, for the students. The QoS and the GPU type go together here:
+# take a matching pair from check_cluster.sh (examples: A40 / a40_gpu3_normal,
 # GTX2080TI / gtx2080_gpu3_normal). CPUs per GPU are fixed per GPU type.
 GPU_PARTITION="savio3_gpu"
 GPU_QOS="a40_gpu3_ica"
@@ -56,7 +56,7 @@ TRAIN_STEPS=40000
 
 # Walltimes (hh:mm:ss). A laptop core solves one instance in about 18 s;
 # 750 instances on a 32-core node take about 8 minutes, so these are generous.
-TIME_LAW="02:00:00"              # serial: about 6 min on a laptop core, 4-5 times longer on Savio
+TIME_LAW="02:00:00"              # serial: about 6 min on a laptop core, 4-5 times longer on a cluster core
 TIME_SHARD="02:00:00"
 TIME_MERGE="00:20:00"
 TIME_TRAIN="04:00:00"
