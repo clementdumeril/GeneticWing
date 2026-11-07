@@ -206,7 +206,7 @@ const LIVE = /*LIVE_JSON*/null;
   S.push({ name: "Les données", html: `
     <div class="kicker">Phase 3 · les données</div>
     <h1>15&nbsp;080 situations résolues par le professeur</h1>
-    <p>Chaque situation tire un thermique (force, position), un vent et un point de départ au hasard. Le professeur les résout toutes, dans les deux sens de rotation, sur 21 nœuds de 32 cœurs du cluster Savio, en un quart d'heure.</p>
+    <p>Chaque situation tire un thermique (force, position), un vent et un point de départ au hasard. Le professeur les résout toutes, dans les deux sens de rotation, sur 21 nœuds de 32 cœurs du cluster le cluster, en un quart d'heure.</p>
     <div class="big"><div class="stat"><div class="v" id="ctr">0</div><div class="k">situations</div></div><div class="stat"><div class="v">21&nbsp;034</div><div class="k">trajectoires (aile par tronçons)</div></div></div>`,
     draw(t) {
       const cols = Math.max(6, Math.floor(W / 70)), rows = Math.max(4, Math.floor(H / 70)), cw = W / cols, ch = H / rows, shown = Math.min(cols * rows, Math.floor(t * 9));

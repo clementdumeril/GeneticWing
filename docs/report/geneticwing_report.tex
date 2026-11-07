@@ -303,7 +303,7 @@ Reactive law (Zohdi-tuned) & $-4.58$ & $\mathbf{-0.02}$ & $-1.96$ \\
 H1 is not supported as stated: on 87 coupled genes the GA is the weakest working optimizer. \emph{Structure beats search}: a reactive orbit law (circle a centre at a given radius and speed, trade height for speed, motor below a floor) encodes the orbit the planners must otherwise discover. Fitting a genome to the law's flight and refining it by SLSQP gives the best teacher on S1 ($-6.04$, 30\,\% more energy than the law alone).
 
 \section{The teacher at scale}
-The randomized family S1 draws a thermal ($w^\star\in[1.2,2.8]$\,m/s), a wind (0--4\,m/s, any direction) and a start (60--200\,m from the thermal, 180--320\,m altitude, any heading). Each situation is solved in both orbit directions. On Savio (UC Berkeley), 21 nodes of 32 cores solve 15{,}080 situations in about 15 minutes.
+The randomized family S1 draws a thermal ($w^\star\in[1.2,2.8]$\,m/s), a wind (0--4\,m/s, any direction) and a start (60--200\,m from the thermal, 180--320\,m altitude, any heading). Each situation is solved in both orbit directions. On a Slurm cluster, 21 nodes of 32 cores solve 15{,}080 situations in about 15 minutes.
 
 \paragraph{Unsolved situations under the strip wing.} With the strip wing and the margins, the teacher left 39\,\% of the situations unsolved. Since the family has a motor, feasible trajectories always exist: every failure is the optimizer's. In all 128 analysed cases the NLP ended with the inner wing stalled. Re-seeding the NLP with a \emph{faster} orbit rescued 52\,\% of them at $-4.63$, while wider orbits and the straight glide were feasible but harvested nothing (Table~\ref{tab:unsolved}). At a lower lift coefficient the slower inner wing keeps a stall margin. The two-seed teacher (tuned law and faster orbit, per direction) leaves 17\,\% unsolved; the faster orbit wins 83\,\% of the solutions.
 
@@ -346,7 +346,7 @@ SLSQP from straight flight & 8\,\% & $1.49$ & 6.95 & 0.9\,s \\
 \end{figure}
 
 \begin{figure}[ht]\centering
-\includegraphics[width=0.62\linewidth]{savio_scaling.png}
+\includegraphics[width=0.62\linewidth]{scaling.png}
 \caption{Scaling: the student's gap to the teacher against the number of training situations. More data helps up to about 3{,}000 situations, then the limit is the model.}\label{fig:scaling}
 \end{figure}
 
@@ -383,7 +383,7 @@ Teacher's commands, flown & 100\,\% & $-4.70$ & 0.54 & 0.14\,s \\
 \end{table}
 
 \begin{figure}[ht]\centering
-\includegraphics[width=0.66\linewidth]{savio_methods.png}
+\includegraphics[width=0.66\linewidth]{methods.png}
 \caption{Energy gained on 77 test situations: the latent GA over the physics decoder beats the teacher.}\label{fig:methods}
 \end{figure}
 
@@ -460,7 +460,7 @@ the cost up to the flight's end, so that replanning optimizes the objective that
 \end{figure}
 
 \begin{table}[ht]\centering\small
-\caption{Closed loop, Savio: 65 situations $\times$ 4 conditions, replanned every 10\,s (no inner-wing limiter yet).}\label{tab:closedloop}
+\caption{Closed loop, cluster run: 65 situations $\times$ 4 conditions, replanned every 10\,s (no inner-wing limiter yet).}\label{tab:closedloop}
 \begin{tabular}{@{}llccc@{}}
 \toprule
 Condition & Planner & Flown cost & Without violation & Stalled \\ \midrule
@@ -620,7 +620,7 @@ The final system is an amortized model-predictive controller: a learned proposal
 \begin{itemize}
   \item Simulation only: a 3-DOF point mass with a strip-theory wing and an attitude lag, not 6-DOF.
   \item A synthetic thermal model; in the cross-country tasks the thermals are known exactly.
-  \item One run per configuration for the Savio benchmarks (64--80 tasks each, paired comparisons).
+  \item One run per configuration for the cluster benchmarks (64--80 tasks each, paired comparisons).
   \item 17\,\% of the S1 situations are left unsolved by the teacher and excluded from the tests.
   \item The SB-XC's polar is estimated (tested at $\pm$20\,\%).
 \end{itemize}
@@ -652,13 +652,13 @@ Planning to soar is a hard, multimodal, constraint-bound problem. Searching the 
 %=====================================================================
 \appendix
 \chapter{Reproducibility}
-All code is public at \url{https://github.com/clementdumeril/GeneticWing}. The main commands (Savio, from the repository root) are:
+All code is public at \url{https://github.com/clementdumeril/GeneticWing}. The main commands (on the cluster, from the repository root) are:
 \begin{itemize}
   \item \texttt{bash slurm/submit\_all.sh strip}: teacher on 15{,}080 situations, merge, physics study;
   \item \texttt{bash slurm/submit\_all.sh sensitivity}, \texttt{closedloop}, \texttt{xc}, \texttt{distill}, \texttt{dagger}: the studies of Chapters~\ref{ch:student}--\ref{ch:distill};
   \item \texttt{python scenarios/phase4\_view.py}, \texttt{phase5\_view.py}: self-contained 3D pages of flights.
 \end{itemize}
-Compute: Savio (UC Berkeley) CPU nodes of 32 cores and A40 GPUs; two desktop machines (i7-3770, i5-6500) for smaller runs. The software uses NumPy, SciPy and PyTorch, with 69 unit tests.
+Compute: a Slurm cluster with CPU nodes of 32 cores and A40 GPUs; two desktop machines (i7-3770, i5-6500) for smaller runs. The software uses NumPy, SciPy and PyTorch, with 69 unit tests.
 
 \chapter{Main hyperparameters}
 \begin{table}[ht]\centering\small
