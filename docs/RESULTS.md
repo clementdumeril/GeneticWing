@@ -603,6 +603,25 @@ GA, and a DAgger round on the states met in flight, for a 0.24 s planner that
 climbs 70 % faster than the circling rule. One run each; thermals are still
 known exactly on the 20 km tasks.
 
+### Held-out check: 64 new tasks
+
+The DAgger round recorded its states on tasks 0-63, the very tasks it was then
+scored on. `bash slurm/heldout_xc.sh` flies every pilot again on tasks 64-127,
+which no training step has seen (25 minutes):
+
+| Climbs (tasks 64-127) | Mean climb | Speed | Battery | Arrived |
+| --- | --- | --- | --- | --- |
+| Motor all the way | | 29.3 km/h | 64.0 kJ | 100 % |
+| Circling rule, MacCready 0.5 / 1 | 1.30 / 1.25 m/s | 24.1 / 28.3 km/h | 2.7 / 17.3 kJ | 86 / 98 % |
+| Latent GA, MacCready 0.5 / 1 | 2.04 / 2.09 m/s | 26.6 / 29.2 km/h | 2.7 / 2.2 kJ | 89 / 95 % |
+| **Generator after the DAgger round** | **2.21 / 2.22 m/s** | **27.8 / 29.6 km/h** | **2.7 / 2.7 kJ** | **92 / 95 %** |
+
+The generator keeps its climb rate: 2.21 against 1.30 m/s for the circling
+rule (+70 %), still above the GA, which it outpaces on 86 % and 89 % of the
+tasks (+1.2 and +0.4 km/h) at the same energy score (cost +0.015 and -0.002
+against the GA). It has not memorized the training tasks. No wing-section
+stall; at MacCready 1 one flight in 64 breaks a constraint margin.
+
 ## Usage (all phases)
 
 ```bash

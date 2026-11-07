@@ -9,7 +9,8 @@ locally) · Related: [Fixed-Wing](https://github.com/clementdumeril/Fixed-Wing),
 
 A simulated SB-XC sailplane plans its thermal climbs with a flow matching generator distilled from a genetic search
 over a learned command space. On 64 cross-country tasks of 20 km it climbs at 2.23 m/s against 1.29 m/s for a
-circling rule with the same tactician (MacCready 0.5), at 0.24 s per plan; one run per method, thermals known.
+circling rule with the same tactician (MacCready 0.5), at 0.24 s per plan, and at 2.21 against 1.30 m/s on 64
+new tasks that no training step has seen; one run per method, thermals known.
 
 ## Method
 
@@ -40,6 +41,20 @@ One cluster run per row; source: [`docs/RESULTS.md`](docs/RESULTS.md), phases 5 
 Every pilot flies the same tasks with the same tactician and autopilot. At MacCready 1 the DAgger generator is as
 fast as flying on the motor (30.2 against 29.2 km/h) with 13 times less battery, with no wing-section stall. The
 single-thermal comparison with the teacher and how the chain was found: [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md).
+
+The DAgger round recorded its states on these same tasks 0-63, so every pilot was flown again on tasks 64-127,
+which no training step has seen ([`slurm/heldout_xc.sh`](slurm/heldout_xc.sh)):
+
+| Climbs (tasks 64-127, MacCready 0.5 / 1) | Mean climb (m/s) | Speed (km/h) | Battery (kJ) | Arrived |
+| --- | --- | --- | --- | --- |
+| Motor all the way | | 29.3 | 64.0 | 100 % |
+| Circling rule | 1.30 / 1.25 | 24.1 / 28.3 | 2.7 / 17.3 | 86 / 98 % |
+| Latent GA, about 13 s per plan | 2.04 / 2.09 | 26.6 / 29.2 | 2.7 / 2.2 | 89 / 95 % |
+| **Generator after one DAgger round, 0.24 s per plan** | **2.21 / 2.22** | **27.8 / 29.6** | **2.7 / 2.7** | **92 / 95 %** |
+
+The generator keeps its climb rate on the new tasks and is faster than the latent GA on 86 % / 89 % of them, at the
+same energy score (cost +0.015 / −0.002 against the GA). No wing-section stall; at MacCready 1 one flight in 64 breaks
+a constraint margin.
 
 ## Install and quick start
 
