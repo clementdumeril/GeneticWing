@@ -1,0 +1,40 @@
+% Paper-style TikZ figures: thin dark outlines, white or light-grey fills, one accent colour.
+% Use: \documentclass[tikz,border=6pt]{standalone} \usepackage{paperfig}
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{paperfig}
+\RequirePackage[T1]{fontenc}
+\RequirePackage{lmodern}
+\RequirePackage{amsmath,amssymb,bm}
+\RequirePackage{graphicx}
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds,shapes.geometric,decorations.pathreplacing}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Colours: ink and greys do the work; "ours" is the only hue, "key" only for the headline number.
+\definecolor{ink}{HTML}{1A1A1A}
+\definecolor{mid}{HTML}{6B6B6B}
+\definecolor{rule}{HTML}{9A9A9A}
+\definecolor{panel}{HTML}{F4F4F4}
+\definecolor{ours}{HTML}{2F5D8C}
+\definecolor{key}{HTML}{B5432A}
+
+\tikzset{
+  >={Stealth[length=5pt,width=4pt]},
+  every node/.style={font=\small, text=ink},
+  block/.style={draw=ink, line width=0.6pt, fill=white, rounded corners=1.5pt,
+                align=center, inner sep=5pt, minimum height=8mm},
+  oursblock/.style={block, fill=ours!10},
+  ghost/.style={draw=rule, dashed, line width=0.5pt, fill=white, rounded corners=1.5pt,
+                align=center, inner sep=5pt, minimum height=8mm},
+  data/.style={draw=none, align=center, inner sep=2pt},
+  panelbg/.style={fill=panel, draw=none, rounded corners=2pt},
+  flow/.style={->, draw=ink, line width=0.7pt},
+  feedback/.style={->, draw=mid, line width=0.6pt, dash pattern=on 3pt off 2pt},
+  lab/.style={font=\footnotesize, text=mid, inner sep=1.5pt},
+  sub/.style={font=\footnotesize, text=mid},
+  paneltitle/.style={font=\footnotesize\bfseries, text=ink},
+  thumb/.style={inner sep=0pt, draw=rule, line width=0.4pt},
+  keynum/.style={font=\Large\bfseries, text=key},
+}
+\newcommand{\blocktitle}[2]{{\normalsize #1}\\[-1pt]{\footnotesize\color{mid}#2}}
+\endinput

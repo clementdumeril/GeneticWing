@@ -92,7 +92,15 @@ as the first argument. With the defaults, 15k training situations cost about 80 
 | `scaling.png`, `methods.png`, `turn_limits.png` | `python scenarios/report_figures.py --src <phase 3 folder from the cluster>` | cluster outputs, not committed |
 | `closed_loop_tracking.png`, `slides/xc_flight.png` | no committed script | |
 | `xc_flight_20km.png` | `slides/xc_flight.png` with the French labels replaced by English ones | |
-| `overview.svg` / `overview.png` | hand-written SVG, rendered with headless Chrome at 2x; crops in `figures/overview/` | |
+| `flight_thermal.gif`, `flight_xc20km.gif`, `overview/*.png` | `python scripts/make_flight_gifs.py` | `docs/data/` (below) |
+| `overview.tex` / `overview.png` | TikZ with `paperfig.sty`: `pdflatex`, then `pdftoppm -png -r 220` | thumbnails in `figures/overview/` |
+
+`docs/data/flight_thermal.json` and `flight_xc20km.json` are the flights of the 3D viewers, cut to what the GIFs draw
+(`make_flight_gifs.py --extract` on the pages written by `phase4_view.py` and `phase5_view.py` with their default
+arguments and the strip run's command VAE `command_vae_d16.pt`, not committed; rerunning both scripts gives the same
+data). Thermal: S1 situation 600, one latent-GA plan flown open loop in calm air. Cross-country: task 0 of 20 km,
+MacCready 1, the circling rule against climbs by the latent GA (600 flights per plan), without the inner-wing limiter
+(the GA flight stalls a wing section).
 
 ## Credits
 
