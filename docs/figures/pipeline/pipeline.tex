@@ -1,0 +1,20 @@
+% The chain of GeneticWing, as on the poster (Fig. 1), for the README.
+% Build: pdflatex pipeline.tex, then render the PDF to docs/figures/pipeline.png.
+\documentclass[border=12pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage[scaled=0.95]{helvet}
+\usepackage{amsmath,bm}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\newcommand{\lab}{\sffamily\bfseries}
+\tikzset{
+  >={Stealth[length=16pt,width=12pt]},
+  box/.style={draw=black, line width=2pt, fill=white, align=center, inner sep=10pt,
+              font=\fontsize{22}{27}\selectfont\lab},
+  note/.style={align=center, font=\fontsize{20}{25}\selectfont\lab},
+  arr/.style={->, line width=2.4pt},
+  darr/.style={->, line width=2.2pt, dash pattern=on 10pt off 7pt},
+}
+\begin{document}
+\input{pipeline_body}
+\end{document}

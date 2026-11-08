@@ -18,7 +18,7 @@ cumulus at the 600 m cloud base. The red sailplane leaves each thermal higher an
 (rotate, zoom, play, follow the aircraft). Rendered with `scenarios/xc_render3d.py`; the viewers are built by
 `scenarios/phase4_view.py` and `scenarios/phase5_view.py`, then `scenarios/publish_viewers.py`.
 
-![GeneticWing overview: physics models feed RK4 and PyTorch simulators; a teacher, a command VAE, a latent GA and a distilled flow matching generator plan the climbs of 20 km cross-country flights](docs/figures/overview.png)
+![The GeneticWing chain in six stages: a teacher (law tuned by Zohdi's GA, then SLSQP) solves 20,923 climbs; a command VAE writes each climb as 16 numbers; a GA searches those numbers in the simulator; a flow-matching generator learns the GA's answers; it is retrained on the states met in flight; in a 20 km flight it proposes 64 climbs, flies each in the simulator and keeps the best](docs/figures/pipeline.png)
 
 A simulated SB-XC sailplane plans its thermal climbs with a flow matching generator distilled from a genetic search
 over a learned command space. On 64 cross-country tasks of 20 km it climbs at 2.23 m/s against 1.29 m/s for a

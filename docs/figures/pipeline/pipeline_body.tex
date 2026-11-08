@@ -1,0 +1,17 @@
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \tikzset{st/.style={box, text width=14.6cm}, num/.style={draw=black, line width=2pt, circle,
+           minimum size=1.3cm, font=\fontsize{24}{24}\selectfont\lab}}
+  \def\d{4.3}
+  \node[st] (a) at (0,0)        {TEACHER\\[3pt]\normalfont\sffamily\fontsize{19}{23}\selectfont Zohdi-GA law + SLSQP: 20,923 solved climbs};
+  \node[st] (b) at (0,-\d)      {COMMAND VAE\\[3pt]\normalfont\sffamily\fontsize{19}{23}\selectfont learns to write any climb as 16 mbox{numbers} \mbox{$\bm z$}, and \mbox{$\bm z$} back as $C_L$, bank, thrust};
+  \node[st, line width=3.5pt] (c) at (0,-2*\d) {LATENT GA\\[3pt]\normalfont\sffamily\fontsize{19}{23}\selectfont GA over the 16 numbers, each gene flown and scored in the twin: 3,000 flights, 13 s};
+  \node[st] (d) at (0,-3*\d)    {FLOW-MATCHING GENERATOR\\[3pt]\normalfont\sffamily\fontsize{19}{23}\selectfont network that gives the GA's best \mbox{$\bm z$} at once: 0.24 s};
+  \node[st] (e) at (0,-4*\d)    {RETRAINING ON FLIGHT STATES (DAGGER-LIKE)\\[3pt]\normalfont\sffamily\fontsize{19}{23}\selectfont 1,095 turning, climbing states met by the GA pilot};
+  \node[st, line width=3.5pt] (f) at (0,-5*\d) {20 KM CROSS-COUNTRY FLIGHT\\[3pt]\normalfont\sffamily\fontsize{19}{23}\selectfont the planner flies every climb};
+  \foreach \u/\v in {a/b,b/c,c/d,d/e,e/f} \draw[arr] (\u) -- (\v);
+  \foreach \n/\k in {a/1,b/2,c/3,d/4,e/5,f/6} \node[num] at ([xshift=-1.3cm]\n.west) {\k};
+  \draw[darr] (c.east) -- ++(1.2,0) |- (b.east);
+  \node[note, align=left, anchor=west] at (9.8,-1.5*\d) {SEARCH IN\\THE LEARNED\\SPACE};
+  \draw[darr] (f.east) -- ++(1.2,0) |- (d.east);
+  \node[note, align=left, anchor=west] at (9.8,-4.5*\d) {PROPOSE 64,\\FLY EACH IN\\THE TWIN,\\KEEP THE BEST};
+\end{tikzpicture}
