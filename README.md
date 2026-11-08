@@ -4,13 +4,15 @@
 [Results slides, in French](docs/slides/geneticwing_results.pdf) · Related:
 [Fixed-Wing](https://github.com/clementdumeril/Fixed-Wing), [WingJEPA](https://github.com/clementdumeril/WingJEPA)
 
-![A simulated 20 km cross-country flight in 3D: the SB-XC sailplane spirals up drifting thermal columns under cumulus clouds, its trail coloured by climb rate, racing a second sailplane that uses a fixed circling rule](docs/figures/xc_20km_3d.gif)
+![The first 8 km of a simulated 20 km cross-country flight in 3D: the SB-XC sailplane spirals up drifting thermal columns under cumulus clouds, its trail coloured by climb rate, racing a second sailplane that uses a fixed circling rule](docs/figures/xc_20km_3d.gif)
 
-*A whole 20 km flight in the simulator, 45 minutes in about 15 seconds; time runs slower in the climbs. The red
-sailplane plans every climb with the latent GA; its trail turns green where it climbs. The grey one flies the same
-task with the same tactician but a fixed circling rule. Thermal columns drift with the wind, capped by their
-cumulus at the 600 m cloud base. The red sailplane leaves each thermal higher and arrives 4 minutes earlier
-(26.7 against 24.4 km/h); neither uses its battery. Aircraft and thermal cores are drawn larger than life.*
+*The first 8 km of a 20 km flight in the simulator, two climbs: 22 minutes in 49 s, ten times faster than life in
+the climbs and a hundred times in the glides. The red sailplane plans every climb with the latent GA; its trail
+turns green where it climbs. The grey one flies the same task with the same tactician but a fixed circling rule.
+Thermal columns drift with the wind, capped by their cumulus at the 600 m cloud base. The red sailplane leaves the
+second thermal 100 s ahead of the grey one; over the whole task it arrives 4 minutes earlier (26.7 against
+24.4 km/h), and neither uses its battery. Aircraft and thermal cores are drawn larger than life. The whole flight
+is in the 3D viewer below.*
 
 **Fly it yourself in the browser (3D, interactive):**
 [a 20 km cross-country flight](https://clementdumeril.github.io/GeneticWing/viewer/xc_20km.html) ·

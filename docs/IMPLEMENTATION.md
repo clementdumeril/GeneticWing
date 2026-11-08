@@ -94,7 +94,7 @@ as the first argument. With the defaults, 15k training situations cost about 80 
 | `xc_flight_20km.png` | `slides/xc_flight.png` with the French labels replaced by English ones | |
 | `overview.svg` / `overview.png` | hand-written SVG, rendered with headless Chrome at 2x; crops in `figures/overview/` | |
 | `pipeline.png` (README) | `pdflatex figures/pipeline/pipeline.tex`, then the PDF rendered at 130 dpi | the poster's chain diagram |
-| `xc_20km_3d.gif` (README) | `python scenarios/xc_render3d.py results/phase5_view/xc.html docs/figures/xc_20km_3d.gif --fps 12 --climb-step 2.5 --glide-step 30 --size 560 315` | `phase5_view.py` output |
+| `xc_20km_3d.gif` (README) | `python scenarios/xc_render3d.py results/phase5_view/xc.html docs/figures/xc_20km_3d.gif --fps 10 --climb-step 1 --glide-step 10 --until 1300 --size 560 315 --frame-ms 100` | `phase5_view.py` output |
 
 ## Credits
 

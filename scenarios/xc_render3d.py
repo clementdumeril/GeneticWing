@@ -4,7 +4,8 @@ Reads the flights saved by ``phase5_view.py`` (the ``DATA`` block of its HTML pa
 PyVista: thermal columns drifting with the wind, the planned-climb sailplane (red) and the circling-rule one (grey),
 each with its trail (the red one coloured by climb rate), and a camera that follows the red sailplane. Time runs
 slower in the climbs than in the glides. The aircraft and the thermal cores are drawn larger than life.
-Run: ``python scenarios/xc_render3d.py results/phase5_view/xc.html docs/figures/xc_20km_3d.gif``
+Run (README figure): ``python scenarios/xc_render3d.py results/phase5_view/xc.html docs/figures/xc_20km_3d.gif --fps 10
+--climb-step 1 --glide-step 10 --until 1300 --size 560 315 --frame-ms 100``
 """
 
 from __future__ import annotations
@@ -73,6 +74,34 @@ def smooth(x: np.ndarray, t: np.ndarray, tau: float) -> np.ndarray:
     return y
 
 
+def reencode(path: Path, frame_ms: int, hold_ms: int, repeats: int = 0, colors: int = 112) -> int:
+    """Rewrite the GIF with one palette for every frame and no dithering (about 30 % smaller, no flicker).
+
+    The palette is taken from eight frames plus the sailplane's red and the trail's colour map, so small
+    objects keep their colour. The ``repeats`` copies of the last frame are dropped; it is held ``hold_ms``.
+    """
+    from matplotlib import colormaps
+    from PIL import Image, ImageSequence
+
+    with Image.open(path) as im:
+        frames = [f.convert("RGB") for f in ImageSequence.Iterator(im)]
+    frames = frames[: len(frames) - repeats]
+    w, h = frames[0].size
+    mosaic = Image.new("RGB", (w, 8 * h + 120))
+    for k in range(8):
+        mosaic.paste(frames[k * (len(frames) - 1) // 7], (0, k * h))
+    for j, c in enumerate(["#d7301f", "#a8261a", "#e8604f", "#7a1b12", "#7d7d7d", "#1F3FD6"]):
+        mosaic.paste(Image.new("RGB", (w // 6, 60), c), (j * (w // 6), 8 * h))
+    ramp = np.array([colormaps["RdYlGn"](x)[:3] for x in np.linspace(0.0, 1.0, w)]) * 255
+    mosaic.paste(Image.fromarray(np.repeat(ramp.astype(np.uint8)[None], 60, axis=0)), (0, 8 * h + 60))
+    palette = mosaic.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
+    out = [f.quantize(palette=palette, dither=Image.Dither.NONE) for f in frames]
+    durations = [frame_ms] * len(out)
+    durations[-1] = hold_ms
+    out[0].save(path, save_all=True, append_images=out[1:], duration=durations, loop=0, optimize=True)
+    return len(out)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("page", type=Path, help="HTML page written by phase5_view.py")
@@ -83,6 +112,9 @@ def main() -> None:
     parser.add_argument("--glide-step", type=float, default=24.0, help="seconds of flight per frame while gliding")
     parser.add_argument("--scale", type=float, default=22.0, help="aircraft drawn this many times larger")
     parser.add_argument("--thermal-radius", type=float, default=45.0, help="drawn radius of a thermal column, m")
+    parser.add_argument("--until", type=float, help="stop at this flight time, s (default: both arrived)")
+    parser.add_argument("--frame-ms", type=int, help="re-encode the GIF at this frame duration, ms (shared palette)")
+    parser.add_argument("--hold-ms", type=int, default=3000, help="last frame held this long when re-encoding")
     parser.add_argument("--preview", type=int, nargs="*", help="only save these frames as PNG next to OUT")
     args = parser.parse_args()
 
@@ -97,6 +129,8 @@ def main() -> None:
 
     # Frame clock: slow in the red sailplane's climbs, fast in its glides, on until both have arrived.
     t_end = max(ga["t"][-1], rule["t"][-1])
+    if args.until is not None:
+        t_end = min(t_end, args.until)
     clock, now = [], 0.0
     while now < t_end:
         clock.append(now)
@@ -192,7 +226,10 @@ def main() -> None:
     if args.preview is not None:
         print(f"{len(clock)} frames in all; previews saved next to {args.out}")
         return
-    print(f"{len(clock)} frames -> {args.out} ({args.out.stat().st_size / 1e6:.1f} MB)")
+    n = len(clock)
+    if args.frame_ms:
+        n = reencode(args.out, args.frame_ms, args.hold_ms, repeats=args.fps * 2)
+    print(f"{n} frames -> {args.out} ({args.out.stat().st_size / 1e6:.1f} MB)")
 
 
 if __name__ == "__main__":
