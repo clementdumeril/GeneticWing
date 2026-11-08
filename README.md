@@ -1,9 +1,22 @@
 # GeneticWing: soaring trajectory planning for a fixed-wing UAV with genetic search in a learned latent space
 
 [Phase-by-phase results](docs/RESULTS.md) · [Implementation](docs/IMPLEMENTATION.md) ·
-[Results slides, in French](docs/slides/geneticwing_results.pdf) · [3D flight viewers](docs/viewer/) (HTML, open
-locally) · Related: [Fixed-Wing](https://github.com/clementdumeril/Fixed-Wing),
-[WingJEPA](https://github.com/clementdumeril/WingJEPA)
+[Results slides, in French](docs/slides/geneticwing_results.pdf) · Related:
+[Fixed-Wing](https://github.com/clementdumeril/Fixed-Wing), [WingJEPA](https://github.com/clementdumeril/WingJEPA)
+
+![A simulated 20 km cross-country flight in 3D: the SB-XC sailplane spirals up drifting thermal columns under cumulus clouds, its trail coloured by climb rate, racing a second sailplane that uses a fixed circling rule](docs/figures/xc_20km_3d.gif)
+
+*A whole 20 km flight in the simulator, 45 minutes in about 15 seconds; time runs slower in the climbs. The red
+sailplane plans every climb with the latent GA; its trail turns green where it climbs. The grey one flies the same
+task with the same tactician but a fixed circling rule. Thermal columns drift with the wind, capped by their
+cumulus at the 600 m cloud base. The red sailplane leaves each thermal higher and arrives 4 minutes earlier
+(26.7 against 24.4 km/h); neither uses its battery. Aircraft and thermal cores are drawn larger than life.*
+
+**Fly it yourself in the browser (3D, interactive):**
+[a 20 km cross-country flight](https://clementdumeril.github.io/GeneticWing/viewer/xc_20km.html) ·
+[a 60 s climb in calm air, gusts or a misplaced thermal](https://clementdumeril.github.io/GeneticWing/viewer/climb_60s.html)
+(rotate, zoom, play, follow the aircraft). Rendered with `scenarios/xc_render3d.py`; the viewers are built by
+`scenarios/phase4_view.py` and `scenarios/phase5_view.py`, then `scenarios/publish_viewers.py`.
 
 ![GeneticWing overview: physics models feed RK4 and PyTorch simulators; a teacher, a command VAE, a latent GA and a distilled flow matching generator plan the climbs of 20 km cross-country flights](docs/figures/overview.png)
 
@@ -14,7 +27,7 @@ new tasks that no training step has seen; one run per method, thermals known.
 
 ## Method
 
-Started October 2026, simulation only. It extends the flatness-based glide planning of Morando et al. at ARPL
+Started October 2026, simulation only. It extends the flatness-based glide planning of Morando et al.
 ([ICRA 2025](https://arxiv.org/abs/2502.00581), [arXiv 2605.15619](https://arxiv.org/abs/2605.15619)) from
 efficient gliding to soaring. A slow offline teacher (reactive law + SLSQP) solves thousands of single-thermal
 situations. A VAE learns the teacher's commands (C_L, bank, thrust), and its decoder flies them through a
