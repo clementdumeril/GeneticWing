@@ -70,11 +70,15 @@ class ThermalField(WindField):
         core = np.maximum(10.0, 0.102 * cbrt * (1.0 - 0.25 * ratio) * self._zi) / 2.0
         dx = position[..., 0][..., None] - (self._c[:, 0] + self._d[:, 0] * t)
         dy = position[..., 1][..., None] - (self._c[:, 1] + self._d[:, 1] * t)
-        w = mean / _GAUSSIAN_DISK_MEAN * np.exp(-(dx**2 + dy**2) / core**2)
+        w = mean / _GAUSSIAN_DISK_MEAN * np.exp(-(dx**2 + dy**2) / core**2) * self.gain(t)
         w = np.where((z > 0.0) & (z < self._zi), w - self._sink, 0.0)
         out = np.zeros(position.shape)
         out[..., 2] = w.sum(axis=-1)
         return out
+
+    def gain(self, t: np.ndarray) -> np.ndarray | float:
+        """Strength of each thermal at time ``t`` (..., 1), as a fraction of its ``w_star``: always 1 here."""
+        return 1.0
 
 
 @dataclass(frozen=True)
@@ -97,6 +101,10 @@ class XCTask:
     @property
     def air(self) -> WindField:
         return UniformWind((self.wind[0], self.wind[1], 0.0)) + ThermalField(self.thermals)
+
+    def thermal_at(self, i: int, t: float) -> Thermal | None:
+        """Thermal ``i`` as it is at time ``t`` (None when it does not exist then); here thermals never change."""
+        return self.thermals[i]
 
     @property
     def distance(self) -> float:
@@ -260,6 +268,9 @@ class MacCreadyPilot:
     arrival_margin: float = 60.0  # m above the floor on reaching a thermal
     climb_window: float = 20.0  # s, climb rate averaged over it to decide to leave
     capture_factor: float = 1.5  # enter the climb within this many core radii of the centre
+    # Off by default (the published phase 5-6 runs): count the wind in the glides to a thermal (height lost and
+    # time over the ground), and keep looking for a thermal while on the motor in a final glide.
+    wind_aware: bool = False
 
     def __post_init__(self):
         self.reset()
@@ -279,38 +290,84 @@ class MacCreadyPilot:
         ac = task.aircraft
         return v_air / ac.nominal_sink_rate(v_air)
 
-    def choose_target(self, task: XCTask, t: float, p: np.ndarray):
-        """Next target: the goal if a final glide is safe, else the most useful reachable thermal."""
+    def motor_airspeed(self, task: XCTask, p: np.ndarray, aim: np.ndarray) -> float:
+        """Airspeed on the motor: the min-drag speed, raised by half the wind lost toward ``aim`` when wind-aware
+        (the usual best-range correction into a head or cross wind)."""
+        v_md = task.aircraft.min_drag_airspeed
+        if not self.wind_aware:
+            return v_md
+        u = (np.asarray(aim) - p[:2]) / max(float(np.linalg.norm(np.asarray(aim) - p[:2])), 1.0)
+        along, cross = float(np.dot(task.wind, u)), float(task.wind[0] * u[1] - task.wind[1] * u[0])
+        loss = v_md - (np.sqrt(max(v_md**2 - cross**2, 0.0)) + along)
+        return float(np.clip(v_md + 0.5 * max(loss, 0.0), v_md, 1.6 * v_md))
+
+    def final_glide_ok(self, task: XCTask, p: np.ndarray) -> bool:
+        """Whether the goal can be reached from ``p`` gliding at the best-glide speed, with the margin."""
         ac = task.aircraft
         goal = np.asarray(task.goal)
         to_goal = float(np.linalg.norm(goal - p[:2]))
         v_fg = speed_to_fly(ac, 0.0)
         height = p[2] - task.z_floor - self.final_glide_margin
-        wind_along = np.dot(task.wind, (goal - p[:2]) / max(to_goal, 1.0))
-        glide = self._glide_ratio(task, v_fg) * (v_fg + wind_along) / v_fg
-        if to_goal < glide * height:
+        u = (goal - p[:2]) / max(to_goal, 1.0)
+        along = float(np.dot(task.wind, u))
+        ground = v_fg + along
+        if self.wind_aware:  # crabbing against the cross wind costs ground speed too
+            cross = float(task.wind[0] * u[1] - task.wind[1] * u[0])
+            ground = np.sqrt(max(v_fg**2 - cross**2, 0.0)) + along
+        return ground > 0.0 and to_goal < self._glide_ratio(task, v_fg) * ground / v_fg * height
+
+    def choose_target(self, task: XCTask, t: float, p: np.ndarray, powered: bool = False):
+        """Next target: the goal if a final glide is safe, else the most useful reachable thermal.
+
+        ``powered``: the motor is running and holds the height, so a thermal is in reach whatever the glide costs.
+        """
+        ac = task.aircraft
+        goal = np.asarray(task.goal)
+        to_goal = float(np.linalg.norm(goal - p[:2]))
+        if self.final_glide_ok(task, p):
             return -1
         # Thermals reachable with a margin, ranked by the rate of progress toward the goal, counting
         # the time to climb back the height the glide there costs (MacCready's reasoning).
         v_stf = speed_to_fly(ac, self.macready)
         ld = self._glide_ratio(task, v_stf)
+        sink = v_stf / ld
         orbit = self.orbit_speed_factor * ac.min_drag_airspeed
+        wind = np.asarray(task.wind, dtype=float)
         best, best_rate, rescue, rescue_d = None, 0.0, None, np.inf
         for i, th in enumerate(task.thermals):
             if i in self.visited:
                 continue
             c = self.thermal_center(task, i, t)
             d = float(np.linalg.norm(c - p[:2]))
-            z_arrive = p[2] - d / ld
-            if z_arrive < task.z_floor + self.arrival_margin:
+            ground = v_stf
+            if self.wind_aware:  # speed over the ground toward the thermal, crabbing against the cross wind
+                for _ in range(2):  # aim where the drifting thermal will be on arrival
+                    u = (c - p[:2]) / max(d, 1.0)
+                    along, cross = float(wind @ u), float(wind[0] * u[1] - wind[1] * u[0])
+                    ground = np.sqrt(max(v_stf**2 - cross**2, 0.0)) + along
+                    if ground < 1.0:
+                        break
+                    c = self.thermal_center(task, i, t + d / ground)
+                    d = float(np.linalg.norm(c - p[:2]))
+                if ground < 1.0:
+                    continue
+            z_arrive = p[2] - sink * d / ground
+            if powered:
+                z_arrive = max(float(p[2]), task.z_floor + 80.0)
+            elif z_arrive < task.z_floor + self.arrival_margin:
+                continue
+            th = task.thermal_at(i, t + d / ground)  # as it will be on arrival (thermals can be born and die)
+            if th is None:
                 continue
             climb = expected_climb(ac, th, z_arrive, orbit)
             if climb < 0.5 * self.macready:
                 continue
             if d < rescue_d:
                 rescue, rescue_d = i, d
-            progress = to_goal - float(np.linalg.norm(goal - c))
-            rate = progress / (d / v_stf + (d / ld) / climb)
+            t_climb = (0.0 if powered else sink * d / ground) / climb
+            top = c + wind * t_climb if self.wind_aware else c  # the climb drifts with the thermal
+            progress = to_goal - float(np.linalg.norm(goal - top))
+            rate = progress / (d / ground + t_climb)
             if rate > best_rate:
                 best, best_rate = i, rate
         if best is None:
@@ -359,13 +416,21 @@ class MacCreadyPilot:
 
         if self.target != -1 and t - getattr(self, "_checked", -1e9) > 10.0:  # final glide now safe?
             self._checked = t
-            if self.choose_target(task, t, p) == -1:
+            # (wind-aware: only a safe final glide counts; -1 also means "no thermal in reach")
+            if (self.final_glide_ok(task, p) if self.wind_aware else self.choose_target(task, t, p) == -1):
                 self.target, aim = -1, goal
+        elif self.wind_aware and self.motor_on and t - getattr(self, "_checked", -1e9) > 10.0:
+            self._checked = t  # low on the motor toward the goal: take a thermal as soon as one is in reach
+            target = self.choose_target(task, t, p, powered=True)
+            if target != -1:
+                self.target, aim = target, self.thermal_center(task, target, t)
+        if self.wind_aware and self.target != -1:  # lead the drifting thermal instead of chasing it
+            aim = self.thermal_center(task, self.target, t + float(np.linalg.norm(aim - p[:2])) / ground_speed)
         bearing = np.arctan2(aim[1] - p[1], aim[0] - p[0])
         rate_cmd = float(np.clip(self.k_course * _wrap(bearing - course), -0.25, 0.25))  # gentle turns between thermals
         v_ref = speed_to_fly(ac, 0.0 if self.target == -1 else self.macready, float(w[2]))
         if self.motor_on:
-            v_ref = ac.min_drag_airspeed
+            v_ref = self.motor_airspeed(task, p, aim)
         return Guidance(rate_cmd, v_ref, self.motor_on, task.z_floor + 80.0)
 
     @property
@@ -461,7 +526,7 @@ class MotorPilot(MacCreadyPilot):
         goal = np.asarray(task.goal)
         bearing = np.arctan2(goal[1] - p[1], goal[0] - p[0])
         rate = self.k_course * _wrap(bearing - np.arctan2(v[1], v[0]))
-        return Guidance(rate, task.aircraft.min_drag_airspeed, True, task.start[2])
+        return Guidance(rate, self.motor_airspeed(task, p, goal), True, task.start[2])
 
     @property
     def mode_code(self) -> int:
@@ -494,7 +559,7 @@ class PlannedClimbPilot(MacCreadyPilot):
         from geneticwing.closedloop import LoopConfig, Shifted, exact_belief, fly_closed_loop
 
         ac = task.aircraft
-        th = task.thermals[self.target]
+        th = task.thermal_at(self.target, t) or task.thermals[self.target]
         center = tuple(float(x) for x in self.thermal_center(task, self.target, t))
         wind = UniformWind((task.wind[0], task.wind[1], 0.0))
         v_air = np.asarray(v) - task.air(np.asarray(p), t)

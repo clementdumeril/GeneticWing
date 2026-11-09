@@ -16,7 +16,8 @@ is in the 3D viewer below.*
 
 **Fly it yourself in the browser (3D, interactive):**
 [a 20 km cross-country flight](https://clementdumeril.github.io/GeneticWing/viewer/xc_20km.html) ·
-[a 60 s climb in calm air, gusts or a misplaced thermal](https://clementdumeril.github.io/GeneticWing/viewer/climb_60s.html)
+[a 60 s climb in calm air, gusts or a misplaced thermal](https://clementdumeril.github.io/GeneticWing/viewer/climb_60s.html) ·
+[a task over Issoudun in the thermals of the real 12 July 2025 forecast](https://clementdumeril.github.io/GeneticWing/viewer/weather_issoudun.html)
 (rotate, zoom, play, follow the aircraft). Rendered with `scenarios/xc_render3d.py`; the viewers are built by
 `scenarios/phase4_view.py` and `scenarios/phase5_view.py`, then `scenarios/publish_viewers.py`.
 

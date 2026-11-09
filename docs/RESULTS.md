@@ -622,6 +622,57 @@ tasks (+1.2 and +0.4 km/h) at the same energy score (cost +0.015 and -0.002
 against the GA). It has not memorized the training tasks. No wing-section
 stall; at MacCready 1 one flight in 64 breaks a constraint margin.
 
+## Real weather: three days over Issoudun
+
+The thermals above were synthetic. `geneticwing.weather` builds them from the
+archived DWD ICON-D2 forecast (2.2 km, Open-Meteo historical forecast API,
+CC BY 4.0) on a 40 x 30 km grid around Issoudun-Le Fay, for three days of 2025
+(`data/weather/`). The surface heat flux and the convective layer depth
+z_i (parcel method on the forecast temperature profile) give Deardorff's w*
+point by point and hour by hour. Following Allen (NASA/TM-2006-214382), each
+thermal has a bell-shaped core sized by z_i, the density is
+0.6/(z_i r2), each lives 5 to 30 minutes (growing and fading), they drift
+with the 925 hPa wind, and the air between them sinks to return their mass
+flux. A task is a random 20 km route in the grid, started between 11:00 and
+14:30, with a time limit of 12.6 km/h on average.
+
+The tactician needed four changes for real wind (`wind_aware`, off for the
+runs above):
+
+- glides counted over the ground, crabbing against the cross wind;
+- each thermal scored from where its climb ends, after drifting with it;
+- a final glide only when it is really safe (before, "no thermal in reach" read as "final glide");
+- thermals reachable while on the motor, and a faster motor airspeed into the wind.
+
+The thermal births also extend upwind, so the thermals that drift into the
+corridor exist too; without that, the upwind side emptied during the flight
+and pilots chased thermals downwind, up to 11 km off course.
+
+48 tasks per day, rule pilots only (`--weather data/weather/issoudun_<day>.npz`):
+
+| Day | Pilot | Arrived | Battery | Speed | Mean climb |
+| --- | --- | --- | --- | --- | --- |
+| 12 Jul, w* 2.9 m/s, z_i 2,300 m, wind 5.6 m/s | Motor all the way | 100 % | 120.7 kJ | 26.7 km/h | |
+| | Circling rule, MacCready 0.5 / 1 | 90 / 100 % | 5.0 / 1.3 kJ | 22.4 / 24.0 km/h | 2.80 / 2.96 m/s |
+| 2 Aug, cumulus, w* 2.2 m/s, wind 4.3 m/s | Motor all the way | 100 % | 89.3 kJ | 29.3 km/h | |
+| | Circling rule, MacCready 0.5 / 1 | 100 / 100 % | 0.4 / 0.5 kJ | 27.2 / 28.5 km/h | 2.50 / 2.52 m/s |
+| 22 Jun, z_i 890 m, wind 6.7 m/s | Motor all the way | 100 % | 94.7 kJ | 36.7 km/h | |
+| | Circling rule, MacCready 0.5 / 1 | 56 / 54 % | 54.9 / 65.4 kJ | 25.2 / 26.6 km/h | 0.84 / 0.82 m/s |
+
+On the two good days the circling rule flies nearly every task without the
+motor (median 0 kJ), 1 to 4 km/h slower than the motor. On the windy day,
+with a shallow layer and about 7 m/s of wind for an aircraft whose best-glide speed
+is 9 m/s, it climbs at 0.8 m/s, drifts a kilometre per climb and misses the
+time limit on almost half the tasks: a day for the motor. No stall; one
+constraint margin broken in 288 rule flights. The GA and the generator have not
+flown these days yet (they need the cluster: `bash slurm/weather_xc.sh`).
+
+![The forecast w* over Issoudun on 12 July 2025 with the thermals alive at mid-flight and one path, and w* and z_i through the three days](figures/weather_issoudun.png)
+
+[3D viewer of one task](https://clementdumeril.github.io/GeneticWing/viewer/weather_issoudun.html)
+(`scenarios/weather_view.py`): the forecast map on the ground hour by hour,
+the thermals born and fading as they drift, the three pilots, a barogram.
+
 ## Usage (all phases)
 
 ```bash

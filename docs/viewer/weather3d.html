@@ -1,0 +1,425 @@
+<meta charset="utf-8">
+<title>Issoudun Real-Weather Flight</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: task strip, then the 3D corridor over the forecast map with live instruments on it, the transport bar,
+   then barogram + battery beside the results; everything stacks on phones. Same tokens as the other GeneticWing viewers. */
+:root {
+  --bg: #eef2f4; --surface: #ffffff; --ink: #14212b; --muted: #586a77; --line: #cdd6dd; --chip: #e4eaee;
+  --scene: #dfe8ee; --sky: #cfdde7;
+  --mc1: #2f6db0; --mc05: #17936a; --motor: #5d6873;
+  --thermal: #e08a1e; --used: #c4461f;
+  --g0: #e9ece6; --g1: #e6dcc1; --g2: #dcc18b; --g3: #c99a52; --g4: #a8722f;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642; --chip: #1d2a35;
+    --scene: #0f1a23; --sky: #12202b;
+    --mc1: #6ea6e4; --mc05: #39c58c; --motor: #a9b5bf;
+    --thermal: #f0a63c; --used: #ff7a4d;
+    --g0: #18232c; --g1: #2a2c26; --g2: #4a3f27; --g3: #6f5527; --g4: #95692a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642; --chip: #1d2a35;
+  --scene: #0f1a23; --sky: #12202b;
+  --mc1: #6ea6e4; --mc05: #39c58c; --motor: #a9b5bf;
+  --thermal: #f0a63c; --used: #ff7a4d;
+  --g0: #18232c; --g1: #2a2c26; --g2: #4a3f27; --g3: #6f5527; --g4: #95692a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); margin: 0; }
+.wrap { max-width: 1360px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 32px; display: grid; gap: 16px; }
+header { display: grid; gap: 6px; }
+.eyebrow { font: 600 12px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font: 700 clamp(26px, 3.4vw, 38px)/1.08 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 600 19px/1.2 var(--display); margin: 0; letter-spacing: 0.01em; }
+.lede { color: var(--muted); margin: 0; max-width: 80ch; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+.facts b { font: 500 14px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.scene { position: relative; background: var(--scene); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; height: min(64vh, 640px); min-height: 360px; }
+.scene canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud { position: absolute; display: grid; gap: 3px; font-size: 12px; color: var(--muted); background: color-mix(in srgb, var(--surface) 86%, transparent); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); pointer-events: none; }
+.hud.clock { left: 10px; top: 10px; }
+.hud.clock .big { font: 600 26px/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.hud.pilots { right: 10px; top: 10px; min-width: 250px; }
+.hud table { border-collapse: collapse; font: 12px/1.35 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.hud th { font: 600 11px/1.2 var(--display); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); text-align: right; padding: 0 0 3px 10px; }
+.hud th:first-child, .hud td:first-child { text-align: left; padding-left: 0; }
+.hud td { text-align: right; padding: 1px 0 1px 10px; white-space: nowrap; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.mode { font: 600 10px/1 var(--display); letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: var(--chip); color: var(--muted); }
+.mode.climb { background: color-mix(in srgb, var(--thermal) 26%, transparent); color: var(--ink); }
+.mode.motor { background: color-mix(in srgb, var(--used) 22%, transparent); color: var(--ink); }
+.mode.done { background: color-mix(in srgb, var(--mc05) 24%, transparent); color: var(--ink); }
+.hud.legend { left: 10px; bottom: 10px; }
+.ramp { width: 170px; height: 9px; border-radius: 3px; border: 1px solid var(--line); }
+.ticks { display: flex; justify-content: space-between; font: 11px/1 var(--mono); color: var(--muted); }
+.key { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.bar .grow { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.bar input[type=range] { flex: 1; min-width: 0; accent-color: var(--ink); }
+.bar label { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+button, select { font: 500 14px/1.2 var(--body); color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; cursor: pointer; }
+select { border-radius: 8px; padding: 5px 8px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button.play { min-width: 76px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--mc1); outline-offset: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tnum { font: 500 13px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 62px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.card p { margin: 0; color: var(--muted); font-size: 14px; max-width: 72ch; }
+.chart svg { width: 100%; height: auto; display: block; cursor: crosshair; }
+.chart text { font: 11px var(--mono); fill: var(--muted); }
+.tablewrap { overflow-x: auto; }
+table.res { border-collapse: collapse; width: 100%; font-size: 14px; }
+table.res th { font: 600 12px/1.2 var(--display); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); text-align: right; padding: 6px 0 6px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.res td { font: 14px/1.3 var(--mono); font-variant-numeric: tabular-nums; text-align: right; padding: 6px 0 6px 12px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); white-space: nowrap; }
+table.res th:first-child, table.res td:first-child { text-align: left; padding-left: 0; font-family: var(--body); }
+table.res tr.day td { font: 600 13px/1.3 var(--display); letter-spacing: 0.03em; color: var(--muted); padding-top: 12px; border-bottom: none; }
+.note { font-size: 13px; color: var(--muted); }
+footer { font-size: 13px; color: var(--muted); max-width: 90ch; display: grid; gap: 6px; }
+footer p { margin: 0; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 620px) {
+  .scene { height: 62vh; min-height: 320px; }
+  .hud.pilots { left: 10px; right: auto; top: auto; bottom: 10px; min-width: 0; }
+  .hud.legend { display: none; }
+  .hud.clock .big { font-size: 20px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow" id="eyebrow">Real forecast · ICON-D2 · Issoudun-Le Fay</p>
+    <h1 id="title">A 20 km task in the thermals of a real day</h1>
+    <p class="lede" id="lede">The thermals come from the archived forecast for that afternoon: their strength and number follow the
+      ICON-D2 surface heat flux and boundary-layer depth under each point, they are born, grow, fade and drift with the forecast wind.
+      Three pilots fly the same task: the motor all the way, and the wind-aware MacCready tactician at two settings.</p>
+    <ul class="facts" id="facts"></ul>
+  </header>
+
+  <div class="scene" id="scene" aria-label="3D view of the task: drag to rotate, scroll or pinch to zoom">
+    <div class="hud clock"><span id="clock" class="big">--:--</span><span id="tlabel">t = 0 s</span></div>
+    <div class="hud pilots"><table aria-label="Live instruments">
+      <thead><tr><th>Pilot</th><th>Alt m</th><th>Vario</th><th>kJ</th><th>Mode</th></tr></thead>
+      <tbody id="live"></tbody></table></div>
+    <div class="hud legend">
+      <span>Forecast w* on the ground, m/s</span>
+      <div class="ramp" id="ramp"></div>
+      <div class="ticks" id="rampticks"></div>
+      <div class="key"><span><i class="sw" style="background:var(--thermal)"></i>thermal</span><span><i class="sw" style="background:var(--used)"></i>climbed in</span></div>
+    </div>
+  </div>
+
+  <div class="bar" role="group" aria-label="Playback">
+    <button class="play" id="play" type="button" aria-pressed="false">Play</button>
+    <div class="grow"><input id="time" type="range" min="0" max="1000" step="1" value="0" aria-label="Flight time"><span class="tnum" id="tnum">0 s</span></div>
+    <label for="speed">Speed <select id="speed"><option value="15">15×</option><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option></select></label>
+    <div class="chips" id="follow" role="group" aria-label="Camera"></div>
+    <label for="exag">Height ×<select id="exag"><option value="1">1</option><option value="3">3</option><option value="4" selected>4</option><option value="8">8</option></select></label>
+    <label for="tscale">Thermals ×<select id="tscale"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+  </div>
+
+  <div class="grid2">
+    <div class="card chart">
+      <h2>Barogram</h2>
+      <p>Altitude above the ground through the flight. The band is 120 m (the motor starts below) to 600 m (the climbs stop there). Click to jump.</p>
+      <svg id="baro" viewBox="0 0 760 240" role="img" aria-label="Altitude against time for the three pilots"></svg>
+      <svg id="batt" viewBox="0 0 760 120" role="img" aria-label="Battery energy used against time"></svg>
+    </div>
+    <div class="card">
+      <h2>This task</h2>
+      <div class="tablewrap"><table class="res" id="res"></table></div>
+      <h2>All 48 tasks of each day</h2>
+      <p>Same pilots on 48 random 20 km routes per day, started between 11:00 and 14:30. Arrived means within the time limit (an average of 12.6 km/h).</p>
+      <div class="tablewrap"><table class="res" id="sum"></table></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Weather: DWD ICON-D2 (2.2 km) from the Open-Meteo historical forecast archive (CC BY 4.0): sensible heat flux, 2 m temperature,
+      the temperature profile to 700 hPa for the convective layer depth (parcel method) and the 925 hPa wind. w* is Deardorff's
+      convective velocity. Thermal shape, spacing and lifetime follow Allen (NASA/TM-2006-214382): a bell-shaped core, a density of
+      0.6/(z<sub>i</sub>·r<sub>2</sub>), 5 to 30 min of life, and sinking air in between that returns their mass flux.</p>
+    <p>Aircraft: SB-XC point-mass model with strip-wing loads; the aircraft and the thermal widths are drawn larger than life, and
+      heights are exaggerated (both adjustable). Built by <code>scenarios/weather_view.py</code> in GeneticWing.</p>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const DATA = /*WX_JSON*/null;
+(() => {
+  const $ = id => document.getElementById(id);
+  const css = getComputedStyle(document.documentElement);
+  const tok = name => css.getPropertyValue(name).trim();
+  const task = DATA.task, flights = DATA.flights, G = DATA.ground;
+  const KEYS = { mc1: "--mc1", mc05: "--mc05", motor: "--motor" };
+  const SHORT = { mc1: "MacCready 1", mc05: "MacCready 0.5", motor: "Motor" };
+  const MODE = ["glide", "climb", "motor", "final"];
+  const fmt = (x, d = 1) => Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const hhmm = h => { const m = Math.round(h * 60); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+  const T_END = Math.max(...flights.map(f => f.t[f.t.length - 1]));
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---- header -------------------------------------------------------------------------------------------
+  const date = new Date(task.day + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  $("title").textContent = `Issoudun, ${date}: one 20 km task in the forecast thermals`;
+  const compass = d => ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"][Math.round(d / 22.5) % 16];
+  const facts = [
+    ["Day", task.day_label], ["Start", hhmm(task.start_hour)], ["Route toward", `${fmt(task.bearing_deg, 0)}° (${compass(task.bearing_deg)})`],
+    ["w* on the route", `${fmt(task.w_route, 1)} m/s`], ["Convective layer", `${fmt(task.zi_route, 0)} m`],
+    ["Wind", `${fmt(Math.hypot(...task.wind), 1)} m/s from ${compass(task.wind_from_deg)}`],
+    ["Sink between thermals", `${fmt(task.sink, 2)} m/s`], ["Thermals in the task", `${task.thermals_total.toLocaleString("en-US")}`],
+  ];
+  $("facts").innerHTML = facts.map(([k, v]) => `<li>${k} <b>${v}</b></li>`).join("");
+
+  // ---- three.js scene ---------------------------------------------------------------------------------------
+  const sceneEl = $("scene");
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  sceneEl.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.05, 400);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.49;
+  let exag = 4, tscale = 2;
+  const X = x => x / 1000, Z = y => -y / 1000, Yh = z => z / 1000 * exag;
+
+  // Ground: the forecast w* map, lerped between the hours of the flight.
+  const allW = G.w.flat(2), wMin = Math.floor(Math.min(...allW) * 4) / 4, wMax = Math.max(wMin + 0.5, Math.ceil(Math.max(...allW) * 4) / 4);
+  const stops = ["--g0", "--g1", "--g2", "--g3", "--g4"].map(n => new THREE.Color(tok(n)));
+  const rampColor = v => { const s = Math.min(Math.max((v - wMin) / (wMax - wMin), 0), 1) * (stops.length - 1), i = Math.min(Math.floor(s), stops.length - 2); return stops[i].clone().lerp(stops[i + 1], s - i); };
+  const texData = new Uint8Array(G.nx * G.ny * 4);
+  const tex = new THREE.DataTexture(texData, G.nx, G.ny, THREE.RGBAFormat);
+  tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
+  let texHour = null;
+  function paintGround(hour) {
+    const k = Math.min(Math.max(hour - G.hours[0], 0), G.hours.length - 1.0001), i = Math.floor(k), s = k - i;
+    const key = Math.round(k * 30); if (key === texHour) return; texHour = key;
+    const a = G.w[i], b = G.w[Math.min(i + 1, G.w.length - 1)];
+    for (let j = 0; j < G.ny; j++) for (let q = 0; q < G.nx; q++) {
+      const c = rampColor(a[j][q] * (1 - s) + b[j][q] * s), o = 4 * (j * G.nx + q);
+      texData[o] = c.r * 255; texData[o + 1] = c.g * 255; texData[o + 2] = c.b * 255; texData[o + 3] = 255;
+    }
+    tex.needsUpdate = true;
+  }
+  const gw = X(G.x[1]) - X(G.x[0]), gh = (G.y[1] - G.y[0]) / 1000;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh), new THREE.MeshBasicMaterial({ map: tex }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set((X(G.x[0]) + X(G.x[1])) / 2, 0, -(G.y[0] + G.y[1]) / 2000);
+  scene.add(ground);
+  const ramp = Array.from({ length: 9 }, (_, i) => "#" + rampColor(wMin + (wMax - wMin) * i / 8).getHexString());
+  $("ramp").style.background = `linear-gradient(90deg, ${ramp.join(",")})`;
+  $("rampticks").innerHTML = [wMin, (wMin + wMax) / 2, wMax].map(v => `<span>${fmt(v, 1)}</span>`).join("");
+
+  // Things whose height depends on the exaggeration are rebuilt by build().
+  const lineMat = color => new THREE.LineBasicMaterial({ color, linewidth: 2 });
+  let dynamic = new THREE.Group(); scene.add(dynamic);
+  const thermalObjs = [];
+  const gliders = [], trails = [], shadows = [];
+  const thermalColor = new THREE.Color(tok("--thermal")), usedColor = new THREE.Color(tok("--used"));
+
+  function gliderMesh(color) {
+    const m = new THREE.MeshBasicMaterial({ color }), g = new THREE.Group();
+    const add = (geo, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); };
+    add(new THREE.BoxGeometry(1.7, 0.16, 0.16), 0, 0, 0);
+    add(new THREE.BoxGeometry(0.26, 0.03, 4.6), 0.12, 0.02, 0);
+    add(new THREE.BoxGeometry(0.16, 0.02, 0.9), -0.8, 0.02, 0);
+    add(new THREE.BoxGeometry(0.16, 0.4, 0.02), -0.82, 0.2, 0);
+    g.scale.setScalar(0.075);  // 4.6 m span drawn as 345 m
+    return g;
+  }
+
+  function build() {
+    scene.remove(dynamic); dynamic = new THREE.Group(); scene.add(dynamic);
+    thermalObjs.length = 0; gliders.length = 0; trails.length = 0; shadows.length = 0;
+    const H = Yh(task.z_ceiling);
+    // band ceiling and floor along the corridor, as faint outlines
+    const box = (z, op) => {
+      const y = Yh(z), x0 = X(G.x[0] + 1500), x1 = X(G.x[1] - 1500), z0 = Z(-4500), z1 = Z(4500);
+      const geo = new THREE.BufferGeometry().setFromPoints([[x0, z0], [x1, z0], [x1, z1], [x0, z1], [x0, z0]].map(([a, b]) => new THREE.Vector3(a, y, b)));
+      dynamic.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: tok("--muted"), transparent: true, opacity: op })));
+    };
+    box(task.z_ceiling, 0.45); box(task.z_floor, 0.25);
+    // route, start and goal
+    const route = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(X(task.start[0]), 0.004, Z(task.start[1])), new THREE.Vector3(X(task.goal[0]), 0.004, Z(task.goal[1]))]);
+    const rl = new THREE.Line(route, new THREE.LineDashedMaterial({ color: tok("--ink"), dashSize: 0.25, gapSize: 0.18, transparent: true, opacity: 0.6 }));
+    rl.computeLineDistances(); dynamic.add(rl);
+    const pylon = (x, y, color) => {
+      dynamic.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(X(x), 0, Z(y)), new THREE.Vector3(X(x), H, Z(y))]), new THREE.LineBasicMaterial({ color })));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(X(task.goal_radius) * 0.85, X(task.goal_radius) * 1.6, 40), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(X(x), 0.006, Z(y)); dynamic.add(ring);
+    };
+    pylon(task.start[0], task.start[1], tok("--ink")); pylon(task.goal[0], task.goal[1], tok("--ink"));
+    // north and wind arrows near the start
+    const b = (90 - task.bearing_deg) * Math.PI / 180;  // goal direction from east, CCW, in the map frame
+    const north = new THREE.Vector3(Math.sin(b), 0, -Math.cos(b));
+    dynamic.add(new THREE.ArrowHelper(north, new THREE.Vector3(X(-2200), 0.01, Z(-3800)), 1.2, tok("--ink"), 0.3, 0.18));
+    const ws = Math.hypot(...task.wind), wd = new THREE.Vector3(task.wind[0] / ws, 0, -task.wind[1] / ws);
+    dynamic.add(new THREE.ArrowHelper(wd, new THREE.Vector3(X(-2200), Yh(task.z_ceiling) * 0.5, Z(-3800)).sub(wd.clone().multiplyScalar(0.6)), 1.2, tok("--mc1"), 0.3, 0.18));
+    // thermals: an outer column and a brighter core, faded in and out with their life
+    DATA.thermals.forEach(th => {
+      const r = X(th.r) * tscale, col = th.used ? usedColor : thermalColor;
+      const outer = new THREE.Mesh(new THREE.CylinderGeometry(r, r, H, 22, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.38 * r, 0.38 * r, H, 14, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 22), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false }));
+      disc.rotation.x = -Math.PI / 2;
+      [outer, core].forEach(m => { m.position.y = H / 2; }); disc.position.y = 0.008;
+      const g = new THREE.Group(); g.add(outer, core, disc); g.visible = false; dynamic.add(g);
+      thermalObjs.push({ th, g, outer, core, disc });
+    });
+    // trails, ground shadows, gliders
+    flights.forEach(f => {
+      const color = new THREE.Color(tok(KEYS[f.key]));
+      const pts = f.p.map(p => new THREE.Vector3(X(p[0]), Yh(p[2]), Z(p[1])));
+      const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat(color));
+      const shadow = new THREE.Line(new THREE.BufferGeometry().setFromPoints(f.p.map(p => new THREE.Vector3(X(p[0]), 0.003, Z(p[1])))), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 }));
+      const gl = gliderMesh(color);
+      dynamic.add(trail, shadow, gl);
+      trails.push(trail); shadows.push(shadow); gliders.push(gl);
+    });
+  }
+
+  // ---- time ---------------------------------------------------------------------------------------------
+  const indexAt = (f, t) => { let lo = 0, hi = f.t.length - 1; if (t >= f.t[hi]) return hi; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (f.t[m] <= t) lo = m; else hi = m; } return lo; };
+  const envelope = s => (s < 0 || s > 1) ? 0 : Math.min(Math.max(Math.min(s, 1 - s) / 0.2, 0), 1);
+  const headingAt = (f, i) => { const a = f.p[Math.max(i - 2, 0)], b = f.p[Math.min(i + 2, f.p.length - 1)]; return Math.atan2(b[1] - a[1], b[0] - a[0]); };
+  let t = 0, playing = false, follow = -1;
+  const lastTarget = new THREE.Vector3();
+
+  function setTime(nt) {
+    t = Math.min(Math.max(nt, 0), T_END);
+    paintGround(task.start_hour + t / 3600);
+    thermalObjs.forEach(o => {
+      const g = envelope((t - o.th.b) / o.th.l);
+      o.g.visible = g > 0.02;
+      if (!o.g.visible) return;
+      const s = Math.min(o.th.w / 4, 1);
+      o.outer.material.opacity = g * (0.025 + 0.05 * s) * (o.th.used ? 2 : 1); o.core.material.opacity = g * (0.06 + 0.16 * s) * (o.th.used ? 1.6 : 1); o.disc.material.opacity = g * 0.45;
+      o.g.position.set(X(o.th.c[0] + task.wind[0] * t), 0, Z(o.th.c[1] + task.wind[1] * t));
+    });
+    const rows = [];
+    flights.forEach((f, k) => {
+      const i = indexAt(f, t), p = f.p[i], done = t >= f.t[f.t.length - 1];
+      trails[k].geometry.setDrawRange(0, i + 1); shadows[k].geometry.setDrawRange(0, i + 1);
+      const gl = gliders[k];
+      gl.position.set(X(p[0]), Yh(p[2]), Z(p[1]));
+      const psi = headingAt(f, i), turn = _wrap(headingAt(f, Math.min(i + 1, f.p.length - 1)) - headingAt(f, Math.max(i - 1, 0)));
+      gl.rotation.order = "YZX"; gl.rotation.set(-Math.sign(turn) * Math.abs(f.bank[i]) * Math.PI / 180, psi, 0);
+      gl.visible = !done || f.arrived;
+      const mode = done ? (f.arrived ? "done" : "out") : MODE[f.mode[i]];
+      rows.push(`<tr><td><i class="sw" style="background:var(${KEYS[f.key]})"></i>${SHORT[f.key]}</td><td>${fmt(p[2], 0)}</td><td>${done ? "–" : (f.vz[i] >= 0 ? "+" : "") + fmt(f.vz[i], 1)}</td><td>${fmt(f.battery[i], 1)}</td><td><span class="mode ${mode === "final" ? "glide" : mode}">${mode === "done" ? "arrived" : mode === "final" ? "final glide" : mode}</span></td></tr>`);
+    });
+    $("live").innerHTML = rows.join("");
+    $("clock").textContent = hhmm(task.start_hour + t / 3600);
+    $("tlabel").textContent = `t = ${fmt(t, 0)} s · ${fmt(t / 60, 1)} min`;
+    $("tnum").textContent = `${fmt(t, 0)} s`;
+    $("time").value = Math.round(1000 * t / T_END);
+    if (follow >= 0) {
+      const gp = gliders[follow].position, d = gp.clone().sub(lastTarget);
+      camera.position.add(d); controls.target.add(d); lastTarget.copy(gp);
+    }
+    moveCursor();
+  }
+  function _wrap(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
+
+  function frameAll() {
+    const cx = X(task.distance / 2);
+    controls.target.set(cx, Yh(250), 0);
+    camera.position.set(cx - 4, Yh(task.z_ceiling) + 6.5, 13);
+    controls.update();
+  }
+
+  // ---- charts -----------------------------------------------------------------------------------------
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const el = (name, attrs, parent) => { const e = document.createElementNS(SVGNS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const charts = [];
+  function chart(svg, field, yMax, yTicks, unit, bands) {
+    svg.innerHTML = "";
+    const W = 760, H = +svg.getAttribute("viewBox").split(" ")[3], L = 44, R = 10, T = 8, B = 22;
+    const sx = v => L + (W - L - R) * v / T_END, sy = v => T + (H - T - B) * (1 - v / yMax);
+    yTicks.forEach(v => { el("line", { x1: L, x2: W - R, y1: sy(v), y2: sy(v), stroke: tok("--line"), "stroke-width": 1 }, svg); el("text", { x: L - 6, y: sy(v) + 4, "text-anchor": "end" }, svg).textContent = v; });
+    (bands || []).forEach(v => el("line", { x1: L, x2: W - R, y1: sy(v), y2: sy(v), stroke: tok("--muted"), "stroke-dasharray": "4 4", "stroke-width": 1 }, svg));
+    const step = T_END > 3000 ? 900 : 600;
+    for (let v = 0; v <= T_END; v += step) el("text", { x: sx(v), y: H - 6, "text-anchor": "middle" }, svg).textContent = hhmm(task.start_hour + v / 3600);
+    el("text", { x: L - 6, y: T + 2, "text-anchor": "end", "dominant-baseline": "hanging" }, svg).textContent = "";
+    flights.forEach(f => {
+      const pts = [];
+      for (let i = 0; i < f.t.length; i += 4) pts.push(`${sx(f.t[i]).toFixed(1)},${sy(field(f, i)).toFixed(1)}`);
+      el("polyline", { points: pts.join(" "), fill: "none", stroke: tok(KEYS[f.key]), "stroke-width": 1.6, "stroke-linejoin": "round" }, svg);
+      const e = f.t.length - 1;
+      el("circle", { cx: sx(f.t[e]), cy: sy(field(f, e)), r: 3.2, fill: tok(KEYS[f.key]) }, svg);
+    });
+    el("text", { x: W - R, y: T + 10, "text-anchor": "end" }, svg).textContent = unit;
+    const cursor = el("line", { y1: T, y2: H - B, stroke: tok("--ink"), "stroke-width": 1 }, svg);
+    svg.onclick = ev => { const r = svg.getBoundingClientRect(); const x = (ev.clientX - r.left) / r.width * W; setTime((x - L) / (W - L - R) * T_END); };
+    charts.push({ cursor, sx });
+  }
+  function moveCursor() { charts.forEach(c => { c.cursor.setAttribute("x1", c.sx(t)); c.cursor.setAttribute("x2", c.sx(t)); }); }
+  function drawCharts() {
+    charts.length = 0;
+    chart($("baro"), (f, i) => f.p[i][2], 700, [0, 200, 400, 600], "altitude, m", [task.z_floor, task.z_ceiling]);
+    const kMax = Math.max(10, Math.ceil(Math.max(...flights.map(f => f.battery[f.battery.length - 1])) / 20) * 20);
+    chart($("batt"), (f, i) => f.battery[i], kMax, [0, kMax / 2, kMax], "battery used, kJ");
+    moveCursor();
+  }
+
+  // ---- tables -------------------------------------------------------------------------------------------
+  const mmss = s => `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, "0")} s`;
+  $("res").innerHTML = `<thead><tr><th>Pilot</th><th>Time</th><th>km/h</th><th>kJ</th><th>Climbs</th><th>m/s</th></tr></thead><tbody>` +
+    flights.map(f => { const rate = f.climbs.length ? f.climbs.reduce((a, c) => a + (c.z1 - c.z0), 0) / f.climbs.reduce((a, c) => a + (c.t1 - c.t0), 0) : null;
+      return `<tr><td><i class="sw" style="background:var(${KEYS[f.key]})"></i>${SHORT[f.key]}</td><td>${f.arrived ? mmss(f.duration) : "not in time"}</td><td>${fmt(f.speed_kmh, 1)}</td><td>${fmt(f.battery_kj, 1)}</td><td>${f.climbs.length}</td><td>${rate === null ? "–" : fmt(rate, 2)}</td></tr>`; }).join("") + "</tbody>";
+  if (DATA.summary && DATA.summary.length) {
+    const name = { mc1: "MacCready 1", "mc0.5": "MacCready 0.5", motor: "Motor" }, key = { mc1: "--mc1", "mc0.5": "--mc05", motor: "--motor" };
+    let html = `<thead><tr><th>Pilot</th><th>Arrived</th><th>kJ</th><th>km/h</th><th>Climb m/s</th></tr></thead><tbody>`, day = null;
+    DATA.summary.forEach(r => {
+      if (r.day !== day) { day = r.day; html += `<tr class="day"><td colspan="5">${new Date(r.day + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · ${r.day_label}</td></tr>`; }
+      html += `<tr><td><i class="sw" style="background:var(${key[r.pilot]})"></i>${name[r.pilot]}</td><td>${fmt(r.arrived, 0)} %</td><td>${fmt(r.kj, 1)}</td><td>${fmt(r.kmh, 1)}</td><td>${r.climb === null ? "–" : fmt(r.climb, 2)}</td></tr>`;
+    });
+    $("sum").innerHTML = html + "</tbody>";
+  }
+
+  // ---- controls -----------------------------------------------------------------------------------------
+  const followBox = $("follow");
+  [{ label: "Free camera", k: -1 }].concat(flights.map((f, k) => ({ label: "Follow " + SHORT[f.key], k }))).forEach(o => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = o.label; b.setAttribute("aria-pressed", String(o.k === follow));
+    b.onclick = () => {
+      follow = o.k; [...followBox.children].forEach(c => c.setAttribute("aria-pressed", String(c === b)));
+      if (follow >= 0) {
+        const gp = gliders[follow].position;
+        controls.target.copy(gp); camera.position.copy(gp).add(new THREE.Vector3(-2.2, 1.6, 2.6)); lastTarget.copy(gp);
+      } else frameAll();
+    };
+    followBox.appendChild(b);
+  });
+  $("play").onclick = () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; $("play").setAttribute("aria-pressed", String(playing)); if (playing && t >= T_END) setTime(0); };
+  $("time").oninput = e => setTime(e.target.value / 1000 * T_END);
+  $("exag").onchange = e => { exag = +e.target.value; build(); frameAll(); setTime(t); };
+  $("tscale").onchange = e => { tscale = +e.target.value; build(); setTime(t); };
+
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min((now - last) / 1000, 0.1); last = now;
+    if (playing) { setTime(t + dt * +$("speed").value); if (t >= T_END) { playing = false; $("play").textContent = "Play"; $("play").setAttribute("aria-pressed", "false"); } }
+    controls.update(); renderer.render(scene, camera); requestAnimationFrame(tick);
+  }
+  function resize() { const w = sceneEl.clientWidth, h = sceneEl.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  window.addEventListener("resize", resize);
+  scene.background = new THREE.Color(tok("--sky"));
+  build(); resize(); frameAll(); drawCharts();
+  // open on a moment with every pilot in the air and some thermals in use
+  const firstClimb = flights[0].climbs.length > 1 ? flights[0].climbs[1].t0 + 40 : T_END * 0.3;
+  setTime(firstClimb);
+  if (!reduce) { /* stay paused until the viewer presses Play */ }
+  requestAnimationFrame(tick);
+})();
+</script>

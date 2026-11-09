@@ -19,6 +19,11 @@ fraction of its stall (``geneticwing.strip.protected_cl``); 0 turns it off.
 
 The tactician and the thermal field are identical for one task, so the
 pilots differ only by how they climb (and by where that takes them next).
+
+``--weather data/weather/<site>_<date>.npz`` flies the tasks of
+:func:`geneticwing.weather.weather_task` instead: routes over a real place, in
+thermals whose strength, depth, number and drift come from that day's archived
+forecast, and which are born and die during the flight.
 Run: ``python scenarios/phase5_crosscountry.py --vae D/physics/command_vae_d16.pt --tasks 64``
 """
 
@@ -35,10 +40,8 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 import numpy as np  # noqa: E402
-import torch  # noqa: E402
 
 from geneticwing.aircraft import SBXC_APPROX  # noqa: E402
-from geneticwing.closedloop import DistilledPlanner, LatentPlanner, PriorPlanner, load_distilled  # noqa: E402
 from geneticwing.crosscountry import (  # noqa: E402
     Autopilot,
     MacCreadyPilot,
@@ -47,8 +50,7 @@ from geneticwing.crosscountry import (  # noqa: E402
     fly_xc,
     xc_family,
 )
-from geneticwing.latent import ConditionalVAE  # noqa: E402
-from geneticwing.torchsim import SimConfig  # noqa: E402
+from geneticwing.weather import ConvectiveDay, weather_task  # noqa: E402
 
 PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "safe0.5", "safe1", "prior0.5", "fast0.5", "fast1")
 DEFAULT_PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "fast0.5", "fast1")
@@ -56,6 +58,15 @@ _STATE: dict = {}
 
 
 def _init_worker(vae_state, cfg):
+    _STATE.update(cfg=cfg)
+    if vae_state is None:  # rule pilots only: no torch needed
+        return
+    import torch
+
+    from geneticwing.closedloop import DistilledPlanner, LatentPlanner, PriorPlanner, load_distilled
+    from geneticwing.latent import ConditionalVAE
+    from geneticwing.torchsim import SimConfig
+
     torch.set_num_threads(1)
     c = vae_state["config"]
     vae = ConditionalVAE(c["dim"], 6, c["latent_dim"], cfg["width"], cfg["depth"], c["beta"], device="cpu")
@@ -71,31 +82,42 @@ def _init_worker(vae_state, cfg):
 
 
 def make_pilot(name: str):
+    wind_aware = bool(_STATE["cfg"].get("wind_aware"))
     if name == "motor":
-        return MotorPilot()
+        return MotorPilot(wind_aware=wind_aware)
     kind = name.rstrip("0123456789.")
     setting = float(name[len(kind):])
     if kind == "mc":
-        return MacCreadyPilot(macready=setting)
+        return MacCreadyPilot(macready=setting, wind_aware=wind_aware)
     return PlannedClimbPilot(macready=setting, planner=_STATE[kind], motor_in_climbs=False,
-                             inner_wing_protection=_STATE["cfg"]["protect"])
+                             inner_wing_protection=_STATE["cfg"]["protect"], wind_aware=wind_aware)
+
+
+def make_task(instance: int):
+    if _STATE["cfg"].get("weather"):  # thermals of a real day (geneticwing.weather)
+        if "day" not in _STATE:
+            _STATE["day"] = ConvectiveDay.load(Path(_STATE["cfg"]["weather"]))
+        return weather_task(_STATE["day"], instance, distance=_STATE["cfg"]["distance"])
+    return xc_family(instance, distance=_STATE["cfg"]["distance"])
 
 
 def run(job):
     instance, name = job
-    task = xc_family(instance, distance=_STATE["cfg"]["distance"])
-    if _STATE["ga"].recorder is not None:
-        _STATE["ga"].recorder.clear()
+    task = make_task(instance)
+    recorder = _STATE["ga"].recorder if "ga" in _STATE else None
+    if recorder is not None:
+        recorder.clear()
     tic = time.perf_counter()
     f = fly_xc(task, make_pilot(name), autopilot=Autopilot(inner_wing_protection=_STATE["cfg"]["protect"]))
     rates = [(c["z1"] - c["z0"]) / max(c["t1"] - c["t0"], 1.0) for c in f.climbs]
     return {
         "instance": instance, "pilot": name, "thermals": len(task.thermals), "arrived": f.arrived,
+        "start_hour": getattr(task, "start_hour", None),
         "duration": f.duration, "speed_kmh": f.speed_kmh, "cost": f.cost, "battery": f.battery, "stored": f.stored,
         "climbs": f.climbs, "climb_rate": float(np.mean(rates)) if rates else None,
         "climb_time": float(sum(c["t1"] - c["t0"] for c in f.climbs)),
         "violated": f.violated, "stalled": f.stalled, "wall": time.perf_counter() - tic,
-        "records": list(_STATE["ga"].recorder) if name.startswith("ga") and _STATE["ga"].recorder is not None else [],
+        "records": list(recorder) if name.startswith("ga") and recorder is not None else [],
     }
 
 
@@ -132,7 +154,7 @@ def summarize(results, pilots) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--vae", type=Path, required=True, help="command VAE trained with --margins")
+    parser.add_argument("--vae", type=Path, help="command VAE trained with --margins (needed by the planned climbs)")
     parser.add_argument("--out", type=Path, default=Path("results/phase5"))
     parser.add_argument("--tasks", type=int, default=64)
     parser.add_argument("--first", type=int, default=0)
@@ -144,6 +166,10 @@ def main() -> None:
                         help="save every GA climb plan (context, aircraft state, latent point) to <out>/ga_inflight.npz")
     parser.add_argument("--baseline", type=Path, help="crosscountry.json of an earlier run on the same tasks, "
                         "whose pilots join the paired comparisons")
+    parser.add_argument("--weather", type=Path, help="fly in the thermals of a real day: a grid saved by "
+                        "geneticwing.weather.fetch_day (data/weather/<site>_<date>.npz)")
+    parser.add_argument("--wind-aware", type=int, choices=(0, 1), help="tactician counts the wind in its glides "
+                        "and looks for thermals again when low on the motor (default: 1 with --weather, else 0)")
     parser.add_argument("--search-budget", type=int, default=1_000)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--depth", type=int, default=3)
@@ -154,11 +180,19 @@ def main() -> None:
 
     cfg = {"distance": args.distance, "search_budget": args.search_budget, "width": args.width, "depth": args.depth,
            "protect": args.protect if args.protect > 0 else None, "flow": str(args.flow) if args.flow else None,
-           "record": args.record}
+           "record": args.record, "weather": str(args.weather) if args.weather else None,
+           "wind_aware": bool(args.weather) if args.wind_aware is None else bool(args.wind_aware)}
     if not args.flow and any(p.startswith("fast") for p in args.pilots):
         args.pilots = [p for p in args.pilots if not p.startswith("fast")]
         print("no --flow: the fast pilots are left out", flush=True)
-    state = torch.load(args.vae, weights_only=False, map_location="cpu")
+    planned = [p for p in args.pilots if p not in ("motor", "mc0.5", "mc1")]
+    if planned and args.vae is None:
+        parser.error(f"--vae is needed by {planned}")
+    state = None
+    if planned:
+        import torch
+
+        state = torch.load(args.vae, weights_only=False, map_location="cpu")
     slow_first = {"ga1": 0, "safe1": 1, "ga0.5": 2, "safe0.5": 3, "fast1": 4, "fast0.5": 5, "prior0.5": 6,
                   "mc0.5": 7, "mc1": 8, "motor": 9}
     jobs = sorted(((i, p) for i in range(args.first, args.first + args.tasks) for p in args.pilots),
