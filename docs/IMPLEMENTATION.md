@@ -96,6 +96,18 @@ as the first argument. With the defaults, 15k training situations cost about 80 
 | `pipeline.png` (README) | `pdflatex figures/pipeline/pipeline.tex`, then the PDF rendered at 130 dpi | the poster's chain diagram |
 | `xc_20km_3d.gif` (README) | `python scenarios/xc_render3d.py results/phase5_view/xc.html docs/figures/xc_20km_3d.gif --fps 10 --climb-step 1 --glide-step 10 --until 1300 --size 560 315 --frame-ms 100` | `phase5_view.py` output |
 
+## Code layout
+
+Moved from the top-level README.
+
+| Path | Content |
+| --- | --- |
+| `src/geneticwing/` | flat planning core, aircraft and strip wing, wind models, simulators, GA and NLP planners, VAEs, students, cross-country pilot |
+| `scenarios/` | one script per phase (`s0_glide.py` to `phase6_distill.py`), figures, 3D viewers |
+| `slurm/` | cluster jobs, chained by `submit_all.sh` |
+| `tests/` | 69 tests |
+| `docs/` | [results](RESULTS.md), [implementation](IMPLEMENTATION.md), figures, slides, viewers |
+
 ## Credits
 
 - Flatness-based fixed-wing planning, Stratosurfer glide data, energy and netto definitions: Morando et al., ARPL,

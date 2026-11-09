@@ -7,6 +7,55 @@ Numbers come from the runs described in each section; the raw outputs of the clu
 normalized by level cruise on the motor; `1` means cruising on the motor, `< 0` means net energy gained from the air.
 H1 to H6 are the hypotheses of the project's design document, which is not in the repository.
 
+## Summary: the 20 km cross-country flights
+
+Moved from the top-level README. The raw outputs of the cluster runs are not in the repository, so phases 3 to 6
+can be checked only by rerunning. Background: the project extends the flatness-based glide planning of
+Morando et al. ([ICRA 2025](https://arxiv.org/abs/2502.00581), [arXiv 2605.15619](https://arxiv.org/abs/2605.15619))
+from efficient gliding to soaring; it started in October 2026 and is simulation only.
+
+The 3D animation in the README shows the first 8 km of a 20 km flight in the simulator, two climbs: 22 minutes in
+49 s, ten times faster than life in the climbs and a hundred times in the glides. The red sailplane plans every climb
+with the latent GA; its trail turns green where it climbs. The grey one flies the same task with the same tactician
+but a fixed circling rule. Thermal columns drift with the wind, capped by their cumulus at the 600 m cloud base. The
+red sailplane leaves the second thermal 100 s ahead of the grey one; over the whole task it arrives 4 minutes
+earlier (26.7 against 24.4 km/h), and neither uses its battery. Aircraft and thermal cores are drawn larger than
+life. It is rendered with `scenarios/xc_render3d.py`; the 3D viewers are built by `scenarios/phase4_view.py` and
+`scenarios/phase5_view.py`, then `scenarios/publish_viewers.py`.
+
+![One 20 km task flown with the circling rule and with planned climbs](figures/xc_flight_20km.png)
+
+*One 20 km task, same tactician: the circling rule (grey) and climbs planned by the latent GA (green), motor off in
+the climbs. Top: path and the drifting thermals; bottom: altitude against the distance flown toward the goal.*
+
+| Climbs (64 tasks of 20 km, MacCready 0.5 / 1) | Mean climb (m/s) | Speed (km/h) | Battery (kJ) |
+| --- | --- | --- | --- |
+| Motor all the way | | 29.2 | 61.9 |
+| Circling rule | 1.29 / 1.22 | 24.9 / 28.3 | 2.9 / 19.3 |
+| Latent GA, about 13 s per plan | 2.08 / 2.07 | 28.2 / 29.5 | 2.9 / 4.7 |
+| Generator distilled on single-thermal situations only | 1.50 / 1.17 | 25.1 / 28.8 | 4.2 / 20.2 |
+| **Generator after one DAgger round, 0.24 s per plan** | **2.23 / 2.20** | **28.5 / 30.2** | **2.9 / 4.7** |
+
+One cluster run per row; details in phases 5 and 6 below. Every pilot flies the same tasks with the same tactician
+and autopilot (MacCready 0.5 is the headline setting). At MacCready 1 the DAgger generator is as fast as flying on
+the motor (30.2 against 29.2 km/h) with 13 times less battery, with no wing-section stall. The single-thermal
+comparison with the teacher and how the chain was found: [`IMPLEMENTATION.md`](IMPLEMENTATION.md).
+
+The DAgger round recorded its states on these same tasks 0-63, so every pilot was flown again on tasks 64-127,
+which no training step has seen ([`slurm/heldout_xc.sh`](../slurm/heldout_xc.sh)):
+
+| Climbs (tasks 64-127, MacCready 0.5 / 1) | Mean climb (m/s) | Speed (km/h) | Battery (kJ) | Arrived |
+| --- | --- | --- | --- | --- |
+| Motor all the way | | 29.3 | 64.0 | 100 % |
+| Circling rule | 1.30 / 1.25 | 24.1 / 28.3 | 2.7 / 17.3 | 86 / 98 % |
+| Latent GA, about 13 s per plan | 2.04 / 2.09 | 26.6 / 29.2 | 2.7 / 2.2 | 89 / 95 % |
+| **Generator after one DAgger round, 0.24 s per plan** | **2.21 / 2.22** | **27.8 / 29.6** | **2.7 / 2.7** | **92 / 95 %** |
+
+The generator keeps its climb rate on the new tasks and is faster than the latent GA on 86 % / 89 % of them, at the
+same energy score (cost +0.015 / −0.002 against the GA). No wing-section stall; at MacCready 1 one flight in 64 breaks
+a constraint margin. Headline ratios used in the README: 2.23 / 1.29 = 1.7 times the circling rule's climb rate;
+13.4 s (phase 6) / 0.24 s = about 50 times faster planning.
+
 ## Phase 1: simulation foundation
 
 | Module | Content |
