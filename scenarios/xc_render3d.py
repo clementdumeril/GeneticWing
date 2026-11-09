@@ -74,7 +74,8 @@ def smooth(x: np.ndarray, t: np.ndarray, tau: float) -> np.ndarray:
     return y
 
 
-def reencode(path: Path, frame_ms: int, hold_ms: int, repeats: int = 0, colors: int = 112) -> int:
+def reencode(path: Path, frame_ms: int, hold_ms: int, repeats: int = 0, colors: int = 112,
+             swatches=("#d7301f", "#a8261a", "#e8604f", "#7a1b12", "#7d7d7d", "#1F3FD6")) -> int:
     """Rewrite the GIF with one palette for every frame and no dithering (about 30 % smaller, no flicker).
 
     The palette is taken from eight frames plus the sailplane's red and the trail's colour map, so small
@@ -90,8 +91,8 @@ def reencode(path: Path, frame_ms: int, hold_ms: int, repeats: int = 0, colors: 
     mosaic = Image.new("RGB", (w, 8 * h + 120))
     for k in range(8):
         mosaic.paste(frames[k * (len(frames) - 1) // 7], (0, k * h))
-    for j, c in enumerate(["#d7301f", "#a8261a", "#e8604f", "#7a1b12", "#7d7d7d", "#1F3FD6"]):
-        mosaic.paste(Image.new("RGB", (w // 6, 60), c), (j * (w // 6), 8 * h))
+    for j, c in enumerate(swatches):
+        mosaic.paste(Image.new("RGB", (w // len(swatches), 60), c), (j * (w // len(swatches)), 8 * h))
     ramp = np.array([colormaps["RdYlGn"](x)[:3] for x in np.linspace(0.0, 1.0, w)]) * 255
     mosaic.paste(Image.fromarray(np.repeat(ramp.astype(np.uint8)[None], 60, axis=0)), (0, 8 * h + 60))
     palette = mosaic.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)

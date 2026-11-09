@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GeneticWing Soaring Planner</title>
+<meta name="description" content="Soaring planner for a simulated sailplane: genetic search in a learned command space, distilled into a 0.24 s generator, and flown in thermals from a real weather forecast.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column (figures may run wider), the animation first, then the method, the numbers, the
+   real-weather study and the ways in. Same tokens and faces as the 3D viewers. */
+:root {
+  --bg: #eef2f4; --surface: #ffffff; --ink: #14212b; --muted: #586a77; --line: #cdd6dd; --chip: #e4eaee;
+  --accent: #2f6db0; --good: #17936a; --thermal: #c9741c;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642; --chip: #1d2a35;
+    --accent: #6ea6e4; --good: #39c58c; --thermal: #f0a63c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d151c; --surface: #15202a; --ink: #e2eaef; --muted: #8b9daa; --line: #283642; --chip: #1d2a35;
+  --accent: #6ea6e4; --good: #39c58c; --thermal: #f0a63c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); margin: 0; }
+.page { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 48px; display: grid; gap: 40px; }
+.page > *, section > *, .two > *, figure > * { min-width: 0; }
+.page { grid-template-columns: minmax(0, 1fr); }
+.col { max-width: 760px; display: grid; gap: 14px; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.eyebrow { font: 600 13px/1.2 var(--display); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font: 700 clamp(32px, 5vw, 54px)/1.02 var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.005em; }
+h2 { font: 700 clamp(24px, 3vw, 32px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 600 19px/1.2 var(--display); margin: 0; letter-spacing: 0.01em; }
+p { margin: 0; }
+.lede { font-size: 18px; color: var(--muted); max-width: 66ch; }
+.links { display: flex; flex-wrap: wrap; gap: 8px; }
+.links a { font: 500 14px/1.2 var(--body); color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; text-decoration: none; }
+.links a.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.links a:hover { border-color: var(--muted); }
+header { display: grid; gap: 14px; }
+figure { margin: 0; display: grid; gap: 8px; }
+figure img { width: 100%; max-width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+figure img.anim { max-width: 860px; }
+figcaption { font-size: 14px; color: var(--muted); max-width: 80ch; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 4px; align-content: start; }
+.stat b { font: 600 34px/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.stat b small { font-size: 16px; color: var(--muted); font-weight: 500; }
+.stat span { font-size: 14px; color: var(--muted); }
+section { display: grid; gap: 18px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { font: 600 12px/1.2 var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: right; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { font: 14px/1.35 var(--mono); font-variant-numeric: tabular-nums; text-align: right; padding: 8px 12px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; font-family: var(--body); }
+tr.hl td { font-weight: 600; }
+tr.day td { font: 600 13px/1.3 var(--display); letter-spacing: 0.04em; color: var(--muted); padding-top: 14px; border-bottom: none; }
+tbody tr:last-child td { border-bottom: none; }
+.note { font-size: 14px; color: var(--muted); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 6px; text-decoration: none; color: var(--ink); align-content: start; }
+.card:hover { border-color: var(--accent); }
+.card span { font-size: 14px; color: var(--muted); }
+.card .go { font: 600 13px/1 var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+footer { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; display: grid; gap: 6px; }
+@media (max-width: 760px) { .stats, .two { grid-template-columns: minmax(0, 1fr); } .stat b { font-size: 30px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <p class="eyebrow">Simulation study · SB-XC sailplane · since October 2026</p>
+    <h1>GeneticWing: a soaring planner for a fixed-wing UAV</h1>
+    <p class="lede">A simulated sailplane plans each thermal climb with a generator distilled from a genetic search in a
+      learned command space. It climbs 70 % faster than a classic circling rule, in 0.24 s per plan, and now flies
+      in thermals built from a real weather forecast.</p>
+    <nav class="links" aria-label="Project links">
+      <a class="primary" href="https://github.com/clementdumeril/GeneticWing">Code on GitHub</a>
+      <a href="https://github.com/clementdumeril/GeneticWing/blob/main/docs/RESULTS.md">Results, phase by phase</a>
+      <a href="report/geneticwing_report.pdf">Report (PDF)</a>
+      <a href="slides/geneticwing_results.pdf">Slides (PDF, French)</a>
+    </nav>
+  </header>
+
+  <figure>
+    <img class="anim" src="figures/xc_20km_3d.gif" width="560" height="315" alt="The first 8 km of a simulated 20 km cross-country flight in 3D: a red sailplane spirals up drifting thermal columns under cumulus clouds, its trail coloured by climb rate, racing a grey sailplane that uses a fixed circling rule">
+    <figcaption>The first 8 km of a 20 km flight, 22 minutes in 49 s. The red sailplane plans every climb with the latent
+      GA, its trail turning green where it climbs; the grey one flies the same task with the same tactician and a fixed
+      circling rule. It leaves the second thermal 100 s ahead and arrives 4 minutes earlier over the task (26.7 against
+      24.4 km/h), without using its battery. Aircraft and thermal cores are drawn larger than life.</figcaption>
+  </figure>
+
+  <div class="stats" role="list">
+    <div class="stat" role="listitem"><b>2.23 <small>m/s</small></b><span>mean climb of the distilled generator on 64 tasks of 20 km, against 1.29 m/s for the circling rule</span></div>
+    <div class="stat" role="listitem"><b>0.24 <small>s</small></b><span>per climb plan, against about 13 s for the genetic search it imitates</span></div>
+    <div class="stat" role="listitem"><b>2.21 <small>m/s</small></b><span>on 64 new tasks that no training step has seen (circling rule: 1.30 m/s)</span></div>
+  </div>
+
+  <section aria-labelledby="chain">
+    <div class="col">
+      <h2 id="chain">Six stages, from a slow teacher to a fast planner</h2>
+      <p>It extends the flatness-based glide planning of Morando et al. (ICRA 2025) from efficient gliding to soaring.
+        A slow offline teacher solves thousands of single-thermal climbs. A variational autoencoder learns its commands
+        (lift coefficient, bank, thrust) and its decoder flies them through a point-mass simulator, so every sample
+        respects the aircraft's limits. A genetic algorithm searching that latent space beats the teacher; a flow
+        matching model distills the search into a 0.24 s generator, retrained once on the states met in flight
+        (DAgger). A MacCready tactician picks the thermals; the planner flies every climb.</p>
+    </div>
+    <figure>
+      <img src="figures/pipeline.png" alt="The GeneticWing chain in six stages: a teacher solves 20,923 climbs; a command VAE writes each climb as 16 numbers; a GA searches those numbers in the simulator; a flow-matching generator learns the GA's answers; it is retrained on the states met in flight; in a 20 km flight it proposes 64 climbs, flies each in the simulator and keeps the best">
+    </figure>
+  </section>
+
+  <section aria-labelledby="numbers">
+    <div class="col">
+      <h2 id="numbers">Same tasks, same tactician, different climbs</h2>
+      <p>64 cross-country tasks of 20 km in synthetic drifting thermals, at two MacCready settings (0.5 / 1). Every
+        pilot flies the same tasks with the same autopilot.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Climbs</th><th>Mean climb, m/s</th><th>Speed, km/h</th><th>Battery, kJ</th></tr></thead>
+        <tbody>
+          <tr><td>Motor all the way</td><td></td><td>29.2</td><td>61.9</td></tr>
+          <tr><td>Circling rule</td><td>1.29 / 1.22</td><td>24.9 / 28.3</td><td>2.9 / 19.3</td></tr>
+          <tr><td>Latent GA, about 13 s per plan</td><td>2.08 / 2.07</td><td>28.2 / 29.5</td><td>2.9 / 4.7</td></tr>
+          <tr><td>Generator distilled on single thermals only</td><td>1.50 / 1.17</td><td>25.1 / 28.8</td><td>4.2 / 20.2</td></tr>
+          <tr class="hl"><td>Generator after one DAgger round, 0.24 s</td><td>2.23 / 2.20</td><td>28.5 / 30.2</td><td>2.9 / 4.7</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">At MacCready 1 the generator is as fast as the motor (30.2 against 29.2 km/h) with 13 times less
+      battery, and no wing-section stall. One run per row; thermals are known exactly in these tasks.</p>
+    <figure>
+      <img src="figures/xc_flight_20km.png" alt="One 20 km task flown with the circling rule and with planned climbs: path through the drifting thermals and altitude against the distance flown">
+      <figcaption>One task with both pilots: path and drifting thermals (top), altitude against the distance flown toward
+        the goal (bottom).</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="weather">
+    <div class="col">
+      <p class="eyebrow">New · real forecast</p>
+      <h2 id="weather">Flying in the thermals of a real day over Issoudun</h2>
+      <p>The synthetic thermals are replaced by ones built from the archived DWD ICON-D2 forecast (2.2 km) around
+        Issoudun-Le Fay, for three days of 2025. The forecast surface heat flux and convective layer depth give the
+        thermal strength w* point by point and hour by hour; following Allen's model (NASA), thermals are spaced by
+        the layer depth, live 5 to 30 minutes, drift with the forecast wind, and the air sinks between them.</p>
+    </div>
+    <figure>
+      <img class="anim" src="figures/weather_issoudun_3d.gif" width="560" height="315" alt="3D animation of a 20 km task over Issoudun on 12 July 2025: a blue sailplane climbs in translucent orange thermal columns that appear, drift and fade over ground coloured by the forecast thermal strength, while a grey sailplane flies on its motor">
+      <figcaption>12 July 2025 from 12:35, task 1. The blue sailplane uses the wind-aware circling rule (MacCready 1) and
+        flies the 20 km in 53 minutes without its battery; the grey one uses the motor all the way, 49 minutes and
+        114 kJ. The ground is coloured by the forecast w*; thermals grow, drift with the 5 m/s wind and fade.</figcaption>
+    </figure>
+    <figure>
+      <img src="figures/weather_issoudun.png" alt="Left: the forecast w* over Issoudun on 12 July 2025 with the thermals alive at mid-flight and one flight path from start to goal. Right: w* and the convective layer depth at the site through the day for the three days">
+      <figcaption>Left: forecast w* at mid-flight, the thermals alive then, and one path. Right: w* and the convective
+        layer depth at the site through each day (parcel method; GFS dotted).</figcaption>
+    </figure>
+    <div class="two">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>48 tasks per day</th><th>Arrived</th><th>Battery, kJ</th><th>km/h</th></tr></thead>
+          <tbody>
+            <tr class="day"><td colspan="4">12 Jul · strong blue thermals</td></tr>
+            <tr><td>Motor all the way</td><td>100 %</td><td>120.7</td><td>26.7</td></tr>
+            <tr><td>Circling rule, MacCready 1</td><td>100 %</td><td>1.3</td><td>24.0</td></tr>
+            <tr class="day"><td colspan="4">2 Aug · cumulus day</td></tr>
+            <tr><td>Motor all the way</td><td>100 %</td><td>89.3</td><td>29.3</td></tr>
+            <tr><td>Circling rule, MacCready 1</td><td>100 %</td><td>0.5</td><td>28.5</td></tr>
+            <tr class="day"><td colspan="4">22 Jun · windy, shallow layer</td></tr>
+            <tr><td>Motor all the way</td><td>100 %</td><td>94.7</td><td>36.7</td></tr>
+            <tr><td>Circling rule, MacCready 1</td><td>54 %</td><td>65.4</td><td>26.6</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col">
+        <p>On the two good days the circling rule flies nearly every task without the motor, 1 to 4 km/h slower than
+          the motor. On the windy day, with about 7 m/s of wind for an aircraft whose best-glide speed is 9 m/s, it
+          climbs at 0.8 m/s and drifts a kilometre per climb: a day for the motor.</p>
+        <p>The tactician learned to count the wind: glides over the ground, the drift during a climb, a final glide
+          only when it is really safe. The genetic search and the generator fly these days next.</p>
+        <p><a href="viewer/weather_issoudun.html">Open this task in 3D</a>: the forecast map hour by hour, every thermal, three pilots and a barogram.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="fly">
+    <h2 id="fly">Fly it yourself</h2>
+    <div class="cards">
+      <a class="card" href="viewer/weather_issoudun.html"><h3>Issoudun, 12 July 2025</h3><span>A 20 km task in the thermals of the real forecast: motor against the circling rule.</span><span class="go">3D viewer</span></a>
+      <a class="card" href="viewer/xc_20km.html"><h3>A 20 km cross-country flight</h3><span>Planned climbs against the circling rule through drifting thermals.</span><span class="go">3D viewer</span></a>
+      <a class="card" href="viewer/climb_60s.html"><h3>A 60 s climb</h3><span>One thermal in calm air, in gusts, or misplaced.</span><span class="go">3D viewer</span></a>
+      <a class="card" href="presentation/geneticwing_live.html"><h3>The whole chain, animated</h3><span>Twelve slides with real flights replayed (in French).</span><span class="go">Presentation</span></a>
+    </div>
+  </section>
+
+  <footer>
+    <p>Simulation only. Weather data: DWD ICON-D2 through the Open-Meteo historical forecast archive (CC BY 4.0).
+      Thermal model: Allen, NASA/TM-2006-214382.</p>
+    <p><a href="https://github.com/clementdumeril/GeneticWing">github.com/clementdumeril/GeneticWing</a> ·
+      related: <a href="https://github.com/clementdumeril/Fixed-Wing">Fixed-Wing</a>, <a href="https://github.com/clementdumeril/WingJEPA">WingJEPA</a></p>
+  </footer>
+</div>
+</body>
+</html>

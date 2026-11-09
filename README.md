@@ -19,7 +19,8 @@ Chain: teacher, command VAE, genetic search in the VAE's latent space, flow-matc
 extends ARPL's flatness-based glide planning (Morando et al., [ICRA 2025](https://arxiv.org/abs/2502.00581)) from
 gliding to soaring. Simulation only; the thermals are known.
 
-[Detailed results](docs/RESULTS.md) · [Implementation](docs/IMPLEMENTATION.md) ·
+[Project site](https://clementdumeril.github.io/GeneticWing/) · [Detailed results](docs/RESULTS.md) ·
+[Implementation](docs/IMPLEMENTATION.md) ·
 [Slides, in French](docs/slides/geneticwing_results.pdf) · Related:
 [Fixed-Wing](https://github.com/clementdumeril/Fixed-Wing), [WingJEPA](https://github.com/clementdumeril/WingJEPA)
 
@@ -36,6 +37,24 @@ gliding to soaring. Simulation only; the thermals are known.
   below 90 % of its stall.
 
 ![The GeneticWing chain in six stages: a teacher (law tuned by Zohdi's GA, then SLSQP) solves 20,923 climbs; a command VAE writes each climb as 16 numbers; a GA searches those numbers in the simulator; a flow-matching generator learns the GA's answers; it is retrained on the states met in flight; in a 20 km flight it proposes 64 climbs, flies each in the simulator and keeps the best](docs/figures/pipeline.png)
+
+## In the thermals of a real day
+
+![A 20 km task over Issoudun on 12 July 2025 in 3D: a blue sailplane climbs in translucent orange thermal columns that appear, drift and fade over ground coloured by the forecast thermal strength, while a grey sailplane flies on its motor](docs/figures/weather_issoudun_3d.gif)
+
+*Issoudun, 12 July 2025. Blue: the circling rule, 20 km in 53 minutes without the battery. Grey: the motor all the
+way, 49 minutes and 114 kJ. Ground coloured by the forecast thermal strength.*
+[Open it in 3D](https://clementdumeril.github.io/GeneticWing/viewer/weather_issoudun.html).
+
+- The thermals come from the archived DWD ICON-D2 forecast over Issoudun-Le Fay for three days of 2025: the
+  forecast heat flux and convective layer give their strength point by point and hour by hour (Allen's model).
+  They grow, drift with the forecast wind and fade.
+- On the two good days the circling rule flies 48 of 48 tasks at MacCready 1 almost without the motor (1.3 and
+  0.5 kJ on average, against 121 and 89 kJ on the motor), 1 to 3 km/h slower.
+- On the windy day (about 7 m/s of wind for a 9 m/s best-glide speed) it arrives on half the tasks: a day for
+  the motor. The genetic search and the generator have not flown these days yet.
+
+![The forecast w* over Issoudun on 12 July 2025 with the thermals alive at mid-flight and one flight path, and w* and the convective layer depth through the three days](docs/figures/weather_issoudun.png)
 
 ## Run it
 
