@@ -9,8 +9,8 @@ and required thrust without integration, so a population is scored in one vector
 definitions follow Morando et al. (ARPL); one baseline GA follows the scheme of T. Zohdi's course. On the raw
 trajectory parameters the GA is the weakest working planner (phase 2). It becomes the best planner once it searches
 the latent space of a VAE whose decoder outputs bounded commands (C_L, bank, thrust at 61 knots) and flies them
-through a simulator; a flow matching model then distills it into a fast generator, retrained once with DAgger on
-the states met in flight.
+through a simulator; a flow matching model then distills it into a fast generator, retrained once (DAgger-like) on
+the states the GA met in flight.
 
 ## Components
 
@@ -59,7 +59,7 @@ line out of the thermal. Made with `scenarios/phase3_student.py`.*
 5. Without the inner-wing protection in the autopilot, 19 to 69 % of the GA's flights stalled a wing section; with
    it none do, and the GA keeps its lead (2.08 against 2.09 m/s at MacCready 0.5).
 6. The first distilled generator, trained only on level starts at 180 to 320 m, lost most of the GA's lead in
-   flight; one DAgger round on 1,095 plans recorded in flight recovered it.
+   flight; one DAgger-like round on 1,095 plans the GA recorded in flight recovered it.
 
 ## Check against flight data
 

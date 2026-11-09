@@ -13,9 +13,9 @@ GeneticWing plans every thermal climb of a simulated sailplane flying cross-coun
 - It climbs 1.7 times faster than the standard circling rule: 2.23 against 1.29 m/s on 64 simulated 20 km flights,
   with the same tactician choosing the thermals.
 - It keeps the gain on 64 tasks no training step has seen: 2.21 against 1.30 m/s.
-- It plans a climb in 0.24 s, about 50 times faster than the genetic search it was distilled from (about 13 s).
+- It plans a climb in 0.24 s, 56 times faster than the genetic search it was distilled from (13.4 s per climb).
 
-Chain: teacher, command VAE, genetic search in the VAE's latent space, flow-matching generator, one DAgger round. It
+Chain: teacher, command VAE, genetic search in the VAE's latent space, flow-matching generator, one DAgger-like round. It
 extends ARPL's flatness-based glide planning (Morando et al., [ICRA 2025](https://arxiv.org/abs/2502.00581)) from
 gliding to soaring. Simulation only; the thermals are known.
 
@@ -32,7 +32,7 @@ gliding to soaring. Simulation only; the thermals are known.
   decoder flies them through a point-mass simulator, so every sample respects the aircraft's limits.
 - A genetic algorithm searching those 16 numbers beats the teacher, but takes about 13 s per climb.
 - A flow-matching generator learns the search's answers. In flight it proposes 64 climbs, flies each in the
-  simulator and keeps the best, in 0.24 s. One DAgger round retrains it on the states met in flight.
+  simulator and keeps the best, in 0.24 s. One DAgger-like round retrains it on 1,095 states the genetic search met in flight.
 - A MacCready tactician picks the thermals; the planner flies every climb. The autopilot keeps every wing section
   below 90 % of its stall.
 

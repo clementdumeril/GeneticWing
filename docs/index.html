@@ -87,7 +87,7 @@ footer { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line)
     <p class="eyebrow">Simulation study · SB-XC sailplane · since October 2026</p>
     <h1>GeneticWing: a soaring planner for a fixed-wing UAV</h1>
     <p class="lede">A simulated sailplane plans each thermal climb with a generator distilled from a genetic search in a
-      learned command space. It climbs 70 % faster than a classic circling rule, in 0.24 s per plan, and now flies
+      learned command space. It climbs 70 % faster than a classic circling rule on tasks it never trained on, in 0.24 s per plan, and now flies
       in thermals built from a real weather forecast.</p>
     <nav class="links" aria-label="Project links">
       <a class="primary" href="https://github.com/clementdumeril/GeneticWing">Code on GitHub</a>
@@ -107,7 +107,7 @@ footer { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line)
 
   <div class="stats" role="list">
     <div class="stat" role="listitem"><b>2.23 <small>m/s</small></b><span>mean climb of the distilled generator on 64 tasks of 20 km, against 1.29 m/s for the circling rule</span></div>
-    <div class="stat" role="listitem"><b>0.24 <small>s</small></b><span>per climb plan, against about 13 s for the genetic search it imitates</span></div>
+    <div class="stat" role="listitem"><b>0.24 <small>s</small></b><span>per climb plan, against 13.4 s for the genetic search it imitates</span></div>
     <div class="stat" role="listitem"><b>2.21 <small>m/s</small></b><span>on 64 new tasks that no training step has seen (circling rule: 1.30 m/s)</span></div>
   </div>
 
@@ -118,8 +118,8 @@ footer { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line)
         A slow offline teacher solves thousands of single-thermal climbs. A variational autoencoder learns its commands
         (lift coefficient, bank, thrust) and its decoder flies them through a point-mass simulator, so every sample
         respects the aircraft's limits. A genetic algorithm searching that latent space beats the teacher; a flow
-        matching model distills the search into a 0.24 s generator, retrained once on the states met in flight
-        (DAgger). A MacCready tactician picks the thermals; the planner flies every climb.</p>
+        matching model distills the search into a 0.24 s generator, retrained once on the states the search met in flight
+        (DAgger-like). A MacCready tactician picks the thermals; the planner flies every climb.</p>
     </div>
     <figure>
       <img src="figures/pipeline.png" alt="The GeneticWing chain in six stages: a teacher solves 20,923 climbs; a command VAE writes each climb as 16 numbers; a GA searches those numbers in the simulator; a flow-matching generator learns the GA's answers; it is retrained on the states met in flight; in a 20 km flight it proposes 64 climbs, flies each in the simulator and keeps the best">
@@ -138,9 +138,9 @@ footer { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line)
         <tbody>
           <tr><td>Motor all the way</td><td></td><td>29.2</td><td>61.9</td></tr>
           <tr><td>Circling rule</td><td>1.29 / 1.22</td><td>24.9 / 28.3</td><td>2.9 / 19.3</td></tr>
-          <tr><td>Latent GA, about 13 s per plan</td><td>2.08 / 2.07</td><td>28.2 / 29.5</td><td>2.9 / 4.7</td></tr>
+          <tr><td>Latent GA, 1,000 flights per 60 s block</td><td>2.08 / 2.07</td><td>28.2 / 29.5</td><td>2.9 / 4.7</td></tr>
           <tr><td>Generator distilled on single thermals only</td><td>1.50 / 1.17</td><td>25.1 / 28.8</td><td>4.2 / 20.2</td></tr>
-          <tr class="hl"><td>Generator after one DAgger round, 0.24 s</td><td>2.23 / 2.20</td><td>28.5 / 30.2</td><td>2.9 / 4.7</td></tr>
+          <tr class="hl"><td>Generator after one DAgger-like round, 0.24 s</td><td>2.23 / 2.20</td><td>28.5 / 30.2</td><td>2.9 / 4.7</td></tr>
         </tbody>
       </table>
     </div>

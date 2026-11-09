@@ -32,29 +32,30 @@ the climbs. Top: path and the drifting thermals; bottom: altitude against the di
 | --- | --- | --- | --- |
 | Motor all the way | | 29.2 | 61.9 |
 | Circling rule | 1.29 / 1.22 | 24.9 / 28.3 | 2.9 / 19.3 |
-| Latent GA, about 13 s per plan | 2.08 / 2.07 | 28.2 / 29.5 | 2.9 / 4.7 |
+| Latent GA, 1,000 flights per 60 s block | 2.08 / 2.07 | 28.2 / 29.5 | 2.9 / 4.7 |
 | Generator distilled on single-thermal situations only | 1.50 / 1.17 | 25.1 / 28.8 | 4.2 / 20.2 |
-| **Generator after one DAgger round, 0.24 s per plan** | **2.23 / 2.20** | **28.5 / 30.2** | **2.9 / 4.7** |
+| **Generator after one DAgger-like round, 0.24 s per plan** | **2.23 / 2.20** | **28.5 / 30.2** | **2.9 / 4.7** |
 
 One cluster run per row; details in phases 5 and 6 below. Every pilot flies the same tasks with the same tactician
-and autopilot (MacCready 0.5 is the headline setting). At MacCready 1 the DAgger generator is as fast as flying on
+and autopilot (MacCready 0.5 is the headline setting). At MacCready 1 the generator is as fast as flying on
 the motor (30.2 against 29.2 km/h) with 13 times less battery, with no wing-section stall. The single-thermal
 comparison with the teacher and how the chain was found: [`IMPLEMENTATION.md`](IMPLEMENTATION.md).
 
-The DAgger round recorded its states on these same tasks 0-63, so every pilot was flown again on tasks 64-127,
+The DAgger-like round recorded its states on these same tasks 0-63, so every pilot was flown again on tasks 64-127,
 which no training step has seen ([`slurm/heldout_xc.sh`](../slurm/heldout_xc.sh)):
 
 | Climbs (tasks 64-127, MacCready 0.5 / 1) | Mean climb (m/s) | Speed (km/h) | Battery (kJ) | Arrived |
 | --- | --- | --- | --- | --- |
 | Motor all the way | | 29.3 | 64.0 | 100 % |
 | Circling rule | 1.30 / 1.25 | 24.1 / 28.3 | 2.7 / 17.3 | 86 / 98 % |
-| Latent GA, about 13 s per plan | 2.04 / 2.09 | 26.6 / 29.2 | 2.7 / 2.2 | 89 / 95 % |
-| **Generator after one DAgger round, 0.24 s per plan** | **2.21 / 2.22** | **27.8 / 29.6** | **2.7 / 2.7** | **92 / 95 %** |
+| Latent GA, 1,000 flights per 60 s block | 2.04 / 2.09 | 26.6 / 29.2 | 2.7 / 2.2 | 89 / 95 % |
+| **Generator after one DAgger-like round, 0.24 s per plan** | **2.21 / 2.22** | **27.8 / 29.6** | **2.7 / 2.7** | **92 / 95 %** |
 
 The generator keeps its climb rate on the new tasks and is faster than the latent GA on 86 % / 89 % of them, at the
 same energy score (cost +0.015 / −0.002 against the GA). No wing-section stall; at MacCready 1 one flight in 64 breaks
 a constraint margin. Headline ratios used in the README: 2.23 / 1.29 = 1.7 times the circling rule's climb rate;
-13.4 s (phase 6) / 0.24 s = about 50 times faster planning.
+13.4 s (phase 6, single thermal, 3,000 flights) / 0.24 s = 56 times faster planning; 2.21 / 1.30 = +70 % on the
+unseen tasks.
 
 ## Phase 1: simulation foundation
 
@@ -618,14 +619,14 @@ flight propose and verify. The generator is learned on S1 situations
 (180-320 m); the cross-country benchmark flies it as the `fast` pilots
 (`--flow`), where climbs reach 600 m.
 
-### The generator in flight: a DAgger round
+### The generator in flight: a DAgger-like round
 
 Flown on the 64 tasks of 20 km, that first generator kept little of the GA's
 lead: climbs at 1.50 and 1.17 m/s (MacCready 0.5 and 1) against 2.08 and 2.07
 for the GA. It had learned level starts at 180-320 m, while a climb is
 replanned in a turn, up to 600 m, and its condition did not even hold the
 current bank. `bash slurm/submit_all.sh dagger` trains it on the states met in
-flight: the GA flies the tasks with every climb plan it wins recorded
+flight (DAgger-like: the states come from the GA's flights, not from the generator's own): the GA flies the tasks with every climb plan it wins recorded
 (situation, aircraft state, latent point; `phase5_crosscountry.py --record`,
 1,095 plans), the generator is retrained on those plus the 3,000 S1 solutions
 with the aircraft's bank, airspeed and C_L added to its condition
@@ -635,9 +636,9 @@ the three steps).
 | Climbs (64 tasks of 20 km) | Mean climb | Speed | Battery | Time per plan |
 | --- | --- | --- | --- | --- |
 | Circling rule, MacCready 0.5 / 1 | 1.29 / 1.22 m/s | 24.9 / 28.3 km/h | 2.9 / 19.3 kJ | feedback law |
-| Latent GA, MacCready 0.5 / 1 | 2.08 / 2.07 m/s | 28.2 / 29.5 km/h | 2.9 / 4.7 kJ | about 13 s |
+| Latent GA, MacCready 0.5 / 1 | 2.08 / 2.07 m/s | 28.2 / 29.5 km/h | 2.9 / 4.7 kJ | 1,000 flights per block |
 | Generator distilled on S1 only | 1.50 / 1.17 m/s | 25.1 / 28.8 km/h | 4.2 / 20.2 kJ | 0.24 s |
-| **Generator after the DAgger round** | **2.23 / 2.20 m/s** | **28.5 / 30.2 km/h** | **2.9 / 4.7 kJ** | **0.24 s** |
+| **Generator after the DAgger-like round** | **2.23 / 2.20 m/s** | **28.5 / 30.2 km/h** | **2.9 / 4.7 kJ** | **0.24 s** |
 
 After one round the generator climbs as fast as the GA it imitates, and
 slightly faster (faster than the GA on 84 % and 77 % of the tasks, +0.4 and
@@ -648,13 +649,13 @@ less battery, with no stall and no violation, and it is unchanged on the S1
 test situations (-5.72 against -4.88 for the teacher). The whole chain holds in
 simulated flight: a slow teacher, a command VAE with a physics decoder, a GA in
 its latent space that beats the teacher, a flow matching model distilling the
-GA, and a DAgger round on the states met in flight, for a 0.24 s planner that
-climbs 70 % faster than the circling rule. One run each; thermals are still
+GA, and a DAgger-like round on the states met in flight, for a 0.24 s planner that
+climbs 73 % faster than the circling rule (70 % on the unseen tasks below). One run each; thermals are still
 known exactly on the 20 km tasks.
 
 ### Held-out check: 64 new tasks
 
-The DAgger round recorded its states on tasks 0-63, the very tasks it was then
+The DAgger-like round recorded its states on tasks 0-63, the very tasks it was then
 scored on. `bash slurm/heldout_xc.sh` flies every pilot again on tasks 64-127,
 which no training step has seen (25 minutes):
 
@@ -663,7 +664,7 @@ which no training step has seen (25 minutes):
 | Motor all the way | | 29.3 km/h | 64.0 kJ | 100 % |
 | Circling rule, MacCready 0.5 / 1 | 1.30 / 1.25 m/s | 24.1 / 28.3 km/h | 2.7 / 17.3 kJ | 86 / 98 % |
 | Latent GA, MacCready 0.5 / 1 | 2.04 / 2.09 m/s | 26.6 / 29.2 km/h | 2.7 / 2.2 kJ | 89 / 95 % |
-| **Generator after the DAgger round** | **2.21 / 2.22 m/s** | **27.8 / 29.6 km/h** | **2.7 / 2.7 kJ** | **92 / 95 %** |
+| **Generator after the DAgger-like round** | **2.21 / 2.22 m/s** | **27.8 / 29.6 km/h** | **2.7 / 2.7 kJ** | **92 / 95 %** |
 
 The generator keeps its climb rate: 2.21 against 1.30 m/s for the circling
 rule (+70 %), still above the GA, which it outpaces on 86 % and 89 % of the
