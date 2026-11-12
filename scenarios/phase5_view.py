@@ -20,7 +20,7 @@ import torch
 from geneticwing.aircraft import SBXC_APPROX
 from geneticwing.closedloop import LatentPlanner
 from geneticwing.crosscountry import EFFICIENCY, MacCreadyPilot, PlannedClimbPilot, fly_xc, xc_family
-from geneticwing.latent import ConditionalVAE
+from geneticwing.latent import ConditionalVAE, context_dim_of
 from geneticwing.torchsim import SimConfig
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "docs" / "viewer" / "xc3d.html"
@@ -61,7 +61,7 @@ def main() -> None:
 
     state = torch.load(args.vae, weights_only=False, map_location="cpu")
     c = state["config"]
-    vae = ConditionalVAE(c["dim"], 6, c["latent_dim"], 512, 3, c["beta"], device="cpu")
+    vae = ConditionalVAE(c["dim"], context_dim_of(state), c["latent_dim"], 512, 3, c["beta"], device="cpu")
     vae.load(state)
     glider = SimConfig(SBXC_APPROX, dt=0.4, knots=61, cl_limit=0.75, bank_max_deg=38.0, load_max=2.1, thrust_max=1e-6)
 

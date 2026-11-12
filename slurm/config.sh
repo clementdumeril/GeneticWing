@@ -39,6 +39,7 @@ VENV="${WORK}/venv"
 # study, in its own folder. `submit_all.sh strip` sets both; they can be exported too.
 STRIP=${STRIP:-0}
 PHASE3_NAME=${PHASE3_NAME:-phase3}   # data and results folder under $WORK
+FAMILY=${FAMILY:-s1}                 # teacher's situations: s1, or weather (slurm/weather_chain.sh sets it)
 
 # --- Experiment size --------------------------------------------------------
 # Training instances are ids TRAIN_FIRST .. TRAIN_FIRST + N_SHARDS * SHARD_SIZE - 1;
@@ -97,3 +98,13 @@ TIME_XC="04:00:00"
 DISTILL_TRAIN=3000
 TIME_DISTILL="02:00:00"
 TIME_DAGGER="03:00:00"            # each step of `submit_all.sh dagger` (collect, distill, fly)
+
+# --- Weather chain (bash slurm/weather_chain.sh) ---------------------------------
+# The whole chain again on the weather family (real-weather ranges, Allen's thermal, z_i in the context),
+# in $WORK/phase3_weather: law -> teacher shards -> merge -> command VAE (d = 16) -> distill -> DAgger in
+# real weather (blind GA climbs on training tasks) -> redistill -> test flights on the held-out tasks.
+WEATHER_DAYS="2025-07-12 2025-08-02 2025-06-22"
+WEATHER_TEST_TASKS=48            # tasks 0..47 of each day: the test set (the qltus campaign flies the same)
+WEATHER_COLLECT_FIRST=1000       # DAgger tasks 1000.. of each day: never tested on
+WEATHER_COLLECT_TASKS=24
+TIME_WEATHER_STEP="08:00:00"

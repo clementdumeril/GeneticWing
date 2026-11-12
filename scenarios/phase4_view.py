@@ -31,7 +31,7 @@ from geneticwing.closedloop import (
     sample_belief,
     turbulent_air,
 )
-from geneticwing.latent import ConditionalVAE
+from geneticwing.latent import ConditionalVAE, context_dim_of
 from geneticwing.strip import sbxc_wing
 from geneticwing.torchsim import SimConfig
 
@@ -94,7 +94,7 @@ def main() -> None:
 
     state = torch.load(args.vae, weights_only=False, map_location="cpu")
     c = state["config"]
-    vae = ConditionalVAE(c["dim"], 6, c["latent_dim"], 512, 3, c["beta"], device="cpu")
+    vae = ConditionalVAE(c["dim"], context_dim_of(state), c["latent_dim"], 512, 3, c["beta"], device="cpu")
     vae.load(state)
     sim = SimConfig(SBXC_APPROX, dt=0.4, knots=61, cl_limit=0.75, bank_max_deg=38.0, load_max=2.1,
                     thrust_max=0.8 * MOTOR_THRUST)

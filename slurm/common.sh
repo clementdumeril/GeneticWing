@@ -9,6 +9,9 @@ strip_flag=()
 if [ "${STRIP:-0}" = "1" ]; then
     strip_flag=(--strip)
 fi
+if [ "${FAMILY:-s1}" != "s1" ]; then  # the teacher's family: s1, or weather (real-weather ranges, Allen's thermal)
+    strip_flag+=(--family "$FAMILY")
+fi
 mkdir -p "$DATA/shards" "$DATA/logs"
 
 # Worker counts come from what SLURM granted. Not from `nproc`: GNU nproc

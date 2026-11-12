@@ -17,6 +17,8 @@ import numpy as np
 from geneticwing.aircraft import SBXC_APPROX
 from geneticwing.soaring import GoalMission, LoiterMission, SoaringScenario
 from geneticwing.wind import RidgeLift, Thermal, UniformWind
+from geneticwing.wind.base import WindField
+from geneticwing.wind.thermal import EnvironmentSink, thermal_density
 
 MOTOR_THRUST = 15.0  # N, placeholder motor-glider conversion
 CRUISE_AIRSPEED = 9.0  # m/s, slightly above best L/D
@@ -144,8 +146,59 @@ _HEADING_CENTER = np.array([0.0, 0.0, 250.0, 2.0, 0.0, 0.0])
 _HEADING_SCALE = np.array([200.0, 200.0, 70.0, 0.8, 4.0, 4.0])
 
 
-def heading_frame_context(scenario: SoaringScenario) -> np.ndarray:
-    """Normalized heading-frame context of an S1-family scenario."""
+# The weather family's context adds the layer depth z_i: its thermals have Allen's own profile and the air
+# between them sinks (:class:`~geneticwing.wind.thermal.EnvironmentSink`), as on the real-weather maps. Its
+# ranges cover the three ICON-D2 days over Issoudun (w* 1.1-4.0 m/s, z_i 760-2350 m, wind 3.7-7.5 m/s, 1st to
+# 99th percentile of the thermals), so the scale is wider. A context's length tells the family: 6 or 7.
+WEATHER_CONTEXT_NAMES = HEADING_CONTEXT_NAMES + ("z_i",)
+_WEATHER_CENTER = np.array([0.0, 0.0, 350.0, 2.7, 0.0, 0.0, 1600.0])
+_WEATHER_SCALE = np.array([200.0, 200.0, 150.0, 1.0, 5.0, 5.0, 600.0])
+WEATHER_CONTEXT_DIM = len(WEATHER_CONTEXT_NAMES)
+
+
+def _norm(dim: int):
+    return (_WEATHER_CENTER, _WEATHER_SCALE) if dim == WEATHER_CONTEXT_DIM else (_HEADING_CENTER, _HEADING_SCALE)
+
+
+def weather_family(instance: int) -> tuple[SoaringScenario, np.ndarray]:
+    """Randomized single-thermal scenario of the weather family and its normalized heading-frame context.
+
+    As :func:`s1_family`, with real-weather ranges: w* 0.9-4.5 m/s, wind 0-8 m/s, z_i 600-2600 m, Allen's
+    profile and the environment's sink, and the climb starting anywhere from inside the thermal (a blind pilot
+    starts circling where it felt the lift) to 250 m away, between 120 and 600 m (the small UAV's band of the
+    cross-country tasks), below 0.8 z_i.
+    """
+    rng = np.random.default_rng(70_000 + instance)
+    w_star, z_i = rng.uniform(0.9, 4.5), rng.uniform(600.0, 2600.0)
+    wind_speed, wind_dir = rng.uniform(0.0, 8.0), rng.uniform(0.0, 2.0 * np.pi)
+    wind = (float(wind_speed * np.cos(wind_dir)), float(wind_speed * np.sin(wind_dir)))
+    bearing, distance = rng.uniform(0.0, 2.0 * np.pi), rng.uniform(0.0, 250.0)
+    z = rng.uniform(120.0, min(600.0, 0.8 * z_i))
+    start = (float(distance * np.cos(bearing)), float(distance * np.sin(bearing)), float(z))
+    scenario = SoaringScenario(
+        name="weather family",
+        aircraft=SBXC_APPROX,
+        wind=weather_air((0.0, 0.0), w_star, z_i, wind),
+        start=start,
+        heading_deg=float(rng.uniform(0.0, 360.0)),
+        airspeed=CRUISE_AIRSPEED,
+        horizon=60.0,
+        mission=LoiterMission(center=(0.0, 0.0), radius=300.0),
+        thrust_max=MOTOR_THRUST,
+        n_control=32,
+    )
+    return scenario, heading_frame_context(scenario, weather=True)
+
+
+def weather_air(center, w_star: float, z_i: float, wind) -> WindField:
+    """Uniform wind, one drifting thermal with Allen's profile and the sink of the air between thermals."""
+    return (UniformWind((wind[0], wind[1], 0.0))
+            + Thermal(center=tuple(center), w_star=w_star, z_i=z_i, drift=tuple(wind), profile="allen")
+            + EnvironmentSink(float(thermal_density(z_i)), w_star, z_i))
+
+
+def heading_frame_context(scenario: SoaringScenario, weather: bool = False) -> np.ndarray:
+    """Normalized heading-frame context of a single-thermal scenario (``weather``: the 7-term one, with z_i)."""
     parts = scenario.wind.components
     thermal = next(p for p in parts if isinstance(p, Thermal))
     wind = next(p for p in parts if isinstance(p, UniformWind)).velocity
@@ -153,28 +206,38 @@ def heading_frame_context(scenario: SoaringScenario) -> np.ndarray:
     ahead, left = np.array([np.sin(h), np.cos(h)]), np.array([-np.cos(h), np.sin(h)])
     to_thermal = np.asarray(thermal.center) - np.asarray(scenario.start[:2])
     w = np.asarray(wind[:2])
-    raw = np.array([to_thermal @ ahead, to_thermal @ left, scenario.start[2], thermal.w_star, w @ ahead, w @ left])
-    return (raw - _HEADING_CENTER) / _HEADING_SCALE
+    raw = [to_thermal @ ahead, to_thermal @ left, scenario.start[2], thermal.w_star, w @ ahead, w @ left]
+    if weather:
+        raw.append(thermal.z_i)
+    center, scale = _norm(len(raw))
+    return (np.array(raw) - center) / scale
 
 
 def heading_context_raw(context: np.ndarray) -> np.ndarray:
     """Normalized heading-frame context -> physical units (m, m/s)."""
-    return np.asarray(context) * _HEADING_SCALE + _HEADING_CENTER
+    context = np.asarray(context)
+    center, scale = _norm(context.shape[-1])
+    return context * scale + center
 
 
 def canonical_scenario(context: np.ndarray, **overrides) -> SoaringScenario:
-    """The S1-family situation seen from the aircraft: start at the origin, nose along +x.
+    """The single-thermal situation seen from the aircraft: start at the origin, nose along +x.
 
-    Built from the normalized heading-frame context alone. Energy and
-    constraints are invariant to this rotation, so scores match the original
+    Built from the normalized heading-frame context alone (S1 family, or the weather family for a 7-term
+    context). Energy and constraints are invariant to this rotation, so scores match the original
     scenario's.
     """
-    ahead, left, z, w_star, wind_ahead, wind_left = heading_context_raw(context)
+    raw = heading_context_raw(context)
+    ahead, left, z, w_star, wind_ahead, wind_left = raw[:6]
+    if len(raw) == WEATHER_CONTEXT_DIM:
+        wind = weather_air((ahead, left), w_star, raw[6], (wind_ahead, wind_left))
+    else:
+        wind = UniformWind((wind_ahead, wind_left, 0.0)) + Thermal(center=(ahead, left), w_star=w_star,
+                                                                    drift=(wind_ahead, wind_left))
     scenario = SoaringScenario(
-        name="S1 family (canonical frame)",
+        name="single thermal (canonical frame)",
         aircraft=SBXC_APPROX,
-        wind=UniformWind((wind_ahead, wind_left, 0.0))
-        + Thermal(center=(ahead, left), w_star=w_star, drift=(wind_ahead, wind_left)),
+        wind=wind,
         start=(0.0, 0.0, z),
         heading_deg=90.0,  # compass east = +x
         airspeed=CRUISE_AIRSPEED,

@@ -47,7 +47,7 @@ class ConditionalVAE:
         self.device = resolve_device(device)
         self.encoder = _mlp(dim + context_dim, 2 * latent_dim, width, depth).to(self.device)
         self.decoder = _mlp(latent_dim + context_dim, dim, width, depth).to(self.device)
-        self.latent_dim, self.dim, self.beta = latent_dim, dim, beta
+        self.latent_dim, self.dim, self.beta, self.context_dim = latent_dim, dim, beta, context_dim
         self.scaler: Standardizer | None = None
 
     def parameters(self):
@@ -99,7 +99,7 @@ class ConditionalVAE:
             "encoder": self.encoder.state_dict(),
             "decoder": self.decoder.state_dict(),
             "scaler": (self.scaler.mean, self.scaler.std),
-            "config": {"latent_dim": self.latent_dim, "dim": self.dim, "beta": self.beta},
+            "config": {"latent_dim": self.latent_dim, "dim": self.dim, "beta": self.beta, "context_dim": self.context_dim},
         }
 
     def load(self, state: dict) -> "ConditionalVAE":
@@ -107,6 +107,12 @@ class ConditionalVAE:
         self.decoder.load_state_dict(state["decoder"])
         self.scaler = Standardizer(*state["scaler"])
         return self
+
+
+def context_dim_of(state: dict) -> int:
+    """Context length of a saved VAE (6: the S1 family; 7: the weather family), older files included."""
+    c = state["config"]
+    return int(c.get("context_dim", state["decoder"]["0.weight"].shape[1] - c["latent_dim"]))
 
 
 def to_latent(x: np.ndarray) -> np.ndarray:

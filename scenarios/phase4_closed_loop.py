@@ -46,7 +46,7 @@ from geneticwing.closedloop import (  # noqa: E402
     sample_belief,
     turbulent_air,
 )
-from geneticwing.latent import ConditionalVAE  # noqa: E402
+from geneticwing.latent import ConditionalVAE, context_dim_of  # noqa: E402
 from geneticwing.strip import sbxc_wing  # noqa: E402
 from geneticwing.torchsim import SimConfig  # noqa: E402
 
@@ -58,7 +58,7 @@ _STATE: dict = {}
 def _init_worker(vae_state, cfg):
     torch.set_num_threads(1)
     c = vae_state["config"]
-    vae = ConditionalVAE(c["dim"], 6, c["latent_dim"], cfg["width"], cfg["depth"], c["beta"], device="cpu")
+    vae = ConditionalVAE(c["dim"], context_dim_of(vae_state), c["latent_dim"], cfg["width"], cfg["depth"], c["beta"], device="cpu")
     vae.load(vae_state)
     sim = SimConfig(SBXC_APPROX, dt=cfg["dt"], knots=cfg["knots"], cl_limit=0.75, bank_max_deg=38.0,
                     load_max=2.1, thrust_max=0.8 * MOTOR_THRUST)  # the teacher's margins, as phase3_physics --margins

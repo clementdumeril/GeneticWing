@@ -26,9 +26,10 @@ import numpy as np
 import torch
 
 from geneticwing.aircraft import Aircraft
-from geneticwing.benchmarks import CRUISE_AIRSPEED, MOTOR_THRUST, canonical_scenario, heading_context_raw
+from geneticwing.benchmarks import (CRUISE_AIRSPEED, MOTOR_THRUST, WEATHER_CONTEXT_DIM, canonical_scenario,
+                                    heading_context_raw)
 from geneticwing.simulation import aerodynamic_acceleration, rk4_step
-from geneticwing.wind.thermal import _GAUSSIAN_DISK_MEAN
+from geneticwing.wind.thermal import _GAUSSIAN_DISK_MEAN, ALLEN_K, ALLEN_R1R2
 
 N_COMMANDS = 3  # lift coefficient, bank, thrust
 
@@ -77,22 +78,55 @@ def _thermal_updraft(p, t, center, drift, w_star, z_i):
     return torch.where((z > 0.0) & (z < z_i), w, torch.zeros_like(w))
 
 
+def _allen_updraft(p, t, center, drift, w_star, z_i):
+    """Torch twin of :func:`geneticwing.wind.thermal.allen_updraft` plus the environment's sink
+    (:class:`~geneticwing.wind.thermal.EnvironmentSink`), for a batch of thermals ``(B,)``."""
+    z = p[..., 2]
+    ratio = torch.clamp(z / z_i, min=1e-6)
+    cbrt = ratio ** (1.0 / 3.0)
+    w_bar = w_star * cbrt * (1.0 - 1.1 * ratio)
+    r2 = torch.clamp(0.102 * cbrt * (1.0 - 0.25 * ratio) * z_i, min=10.0)
+    r1r2 = torch.where(r2 < 600.0, 0.0011 * r2 + 0.14, torch.full_like(r2, 0.8))
+    r1 = r1r2 * r2
+    w_peak = 3.0 * w_bar * (r2**3 - r2**2 * r1) / (r2**3 - r1**3)
+    table = torch.as_tensor(ALLEN_R1R2, dtype=p.dtype, device=p.device)
+    k = torch.as_tensor(ALLEN_K, dtype=p.dtype, device=p.device)[torch.argmin(torch.abs(r1r2[..., None] - table), dim=-1)]
+    c = center + drift * t
+    r = torch.sqrt(torch.sum((p[..., :2] - c) ** 2, dim=-1) + 1e-9)
+    rr = r / r2
+    shape = torch.clamp(1.0 / (1.0 + (k[..., 0] * torch.abs(rr + k[..., 2])) ** k[..., 1]) + k[..., 3] * rr, min=0.0)
+    ring = torch.where((r > r1) & (rr < 2.0), np.pi / 6.0 * torch.sin(np.pi * rr), torch.zeros_like(rr))
+    s_wd = torch.where((ratio > 0.5) & (ratio <= 0.9), 2.5 * (ratio - 0.5), torch.zeros_like(ratio))
+    w = shape * w_peak + torch.clamp(s_wd * ring, max=0.0) * w_bar
+    # the sink between thermals, Allen's Eq. (20) density with r2 at 0.4 z_i
+    density = 0.6 / (z_i * 0.102 * 0.4 ** (1.0 / 3.0) * 0.9 * z_i)
+    frac = torch.clamp(density * np.pi * r2**2, 0.0, 0.5)
+    w = w - frac * torch.clamp(w_bar, min=0.0) / (1.0 - frac)
+    return torch.where((z > 0.0) & (z < z_i), w, torch.zeros_like(w))
+
+
 class CanonicalWorld:
-    """Wind of a batch of S1-family situations in their canonical frames."""
+    """Wind of a batch of single-thermal situations in their canonical frames (S1 or weather family)."""
 
     def __init__(self, contexts: np.ndarray, cfg: SimConfig, device="cpu"):
-        raw = heading_context_raw(np.atleast_2d(contexts))
+        contexts = np.atleast_2d(contexts)
+        raw = heading_context_raw(contexts)
         f = lambda a: torch.as_tensor(a, dtype=torch.float32, device=device)  # noqa: E731
         self.center = f(raw[:, 0:2])
         self.z0 = f(raw[:, 2])
         self.w_star = f(raw[:, 3])
         self.wind = f(raw[:, 4:6])
+        self.weather = contexts.shape[1] == WEATHER_CONTEXT_DIM
+        self.z_i = f(raw[:, 6]) if self.weather else None
         self.cfg = cfg
 
     def __call__(self, p: torch.Tensor, t: float) -> torch.Tensor:
         w = torch.zeros_like(p)
         w[..., :2] = self.wind
-        w[..., 2] = _thermal_updraft(p, t, self.center, self.wind, self.w_star, self.cfg.z_i)
+        if self.weather:
+            w[..., 2] = _allen_updraft(p, t, self.center, self.wind, self.w_star, self.z_i)
+        else:
+            w[..., 2] = _thermal_updraft(p, t, self.center, self.wind, self.w_star, self.cfg.z_i)
         return w
 
 
@@ -154,10 +188,26 @@ def simulate(commands: torch.Tensor, contexts: np.ndarray, cfg: SimConfig):
     return t, torch.stack(ps, dim=1), torch.stack(vs, dim=1), torch.stack(accs, dim=1)
 
 
+def canonical_wind(context: np.ndarray, z_i: float = 1000.0):
+    """The canonical situation's air, its thermal ``z_i`` deep (the family's 1000 m unless the planner is told)."""
+    from dataclasses import replace
+
+    from geneticwing.wind.thermal import Thermal
+
+    wind = canonical_scenario(context).wind
+    if z_i == 1000.0 or len(context) == WEATHER_CONTEXT_DIM:  # a weather context carries its own z_i
+        return wind
+    parts = [replace(c, z_i=float(z_i)) if isinstance(c, Thermal) else c for c in wind.components]
+    out = parts[0]
+    for c in parts[1:]:
+        out = out + c
+    return out
+
+
 def simulate_flights(commands: np.ndarray, context: np.ndarray, cfg: SimConfig):
     """NumPy twin of :func:`simulate` for one situation and many command sequences ``(B, knots, 3)``."""
     ac = cfg.aircraft
-    wind = canonical_scenario(context).wind
+    wind = canonical_wind(context, cfg.z_i)
     commands = np.asarray(commands, dtype=float)
     batch = commands.shape[0]
     p = np.zeros((batch, 3))

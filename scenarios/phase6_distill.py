@@ -45,7 +45,7 @@ from geneticwing.aircraft import SBXC_APPROX  # noqa: E402
 from geneticwing.benchmarks import MOTOR_THRUST, canonical_scenario  # noqa: E402
 from geneticwing.closedloop import state_features  # noqa: E402
 from geneticwing.evolution import RealGA  # noqa: E402
-from geneticwing.latent import ConditionalVAE, to_latent  # noqa: E402
+from geneticwing.latent import ConditionalVAE, context_dim_of, to_latent  # noqa: E402
 from geneticwing.physvae import fly  # noqa: E402
 from geneticwing.soaring import INFEASIBLE_OFFSET, SoaringProblem  # noqa: E402
 from geneticwing.strip import sbxc_wing  # noqa: E402
@@ -64,7 +64,7 @@ def _sim() -> SimConfig:
 def _init_worker(vae_state, flow_state, cfg):
     torch.set_num_threads(1)
     c = vae_state["config"]
-    vae = ConditionalVAE(c["dim"], 6, c["latent_dim"], cfg["width"], cfg["depth"], c["beta"], device="cpu")
+    vae = ConditionalVAE(c["dim"], context_dim_of(vae_state), c["latent_dim"], cfg["width"], cfg["depth"], c["beta"], device="cpu")
     vae.load(vae_state)
     flow = None
     if flow_state is not None:
@@ -207,6 +207,9 @@ def main() -> None:
         level = np.array([state_features(canonical_scenario(c), None) for c in conditions])
         conditions = np.hstack([conditions, level])
         for path in args.inflight:
+            if not path.exists():  # a collection run whose flights planned no climb writes no file
+                log(f"   + no GA climb plan recorded in flight ({path} missing)")
+                continue
             r = np.load(path)
             ok = r["fitness"] < INFEASIBLE_OFFSET
             targets = np.vstack([targets, r["x"][ok]])

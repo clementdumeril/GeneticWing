@@ -52,7 +52,8 @@ from geneticwing.crosscountry import (  # noqa: E402
 )
 from geneticwing.weather import ConvectiveDay, weather_task  # noqa: E402
 
-PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "safe0.5", "safe1", "prior0.5", "fast0.5", "fast1")
+PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "safe0.5", "safe1", "prior0.5", "fast0.5", "fast1",
+          "bmc0.5", "bmc1", "bga0.5", "bga1", "bfast0.5", "bfast1", "bnmpc0.5", "bnmpc1")
 DEFAULT_PILOTS = ("motor", "mc0.5", "mc1", "ga0.5", "ga1", "fast0.5", "fast1")
 _STATE: dict = {}
 
@@ -64,12 +65,12 @@ def _init_worker(vae_state, cfg):
     import torch
 
     from geneticwing.closedloop import DistilledPlanner, LatentPlanner, PriorPlanner, load_distilled
-    from geneticwing.latent import ConditionalVAE
+    from geneticwing.latent import ConditionalVAE, context_dim_of
     from geneticwing.torchsim import SimConfig
 
     torch.set_num_threads(1)
     c = vae_state["config"]
-    vae = ConditionalVAE(c["dim"], 6, c["latent_dim"], cfg["width"], cfg["depth"], c["beta"], device="cpu")
+    vae = ConditionalVAE(c["dim"], context_dim_of(vae_state), c["latent_dim"], cfg["width"], cfg["depth"], c["beta"], device="cpu")
     vae.load(vae_state)
     # The teacher's margins, and no motor: the planned climbs are pure soaring.
     glider = SimConfig(SBXC_APPROX, dt=0.4, knots=61, cl_limit=0.75, bank_max_deg=38.0, load_max=2.1, thrust_max=1e-6)
@@ -77,6 +78,9 @@ def _init_worker(vae_state, cfg):
                   safe=LatentPlanner(vae, glider, cfg["search_budget"], cl_margin=0.8))
     if cfg.get("flow"):
         _STATE["fast"] = DistilledPlanner(vae, glider, load_distilled(cfg["flow"], c["latent_dim"]), 64)
+    for planner in ("ga", "prior", "safe", "fast"):  # plan with the forecast's layer depth instead of 1000 m
+        if planner in _STATE:
+            _STATE[planner].use_z_i = bool(cfg.get("use_z_i"))
     if cfg.get("record"):  # keep every GA climb plan, to distill the GA on the states met in flight
         _STATE["ga"].recorder = []
 
@@ -87,6 +91,14 @@ def make_pilot(name: str):
         return MotorPilot(wind_aware=wind_aware)
     kind = name.rstrip("0123456789.")
     setting = float(name[len(kind):])
+    if kind.startswith("b"):  # blind: no thermal map, a variometer and an EKF (geneticwing.blind)
+        from geneticwing.blind import BlindPlannedPilot, BlindRulePilot
+
+        seed = _STATE.get("instance", 0)
+        if kind == "bmc":
+            return BlindRulePilot(macready=setting, vario_seed=seed)
+        return BlindPlannedPilot(macready=setting, planner=_STATE[kind[1:]], motor_in_climbs=False,
+                                 inner_wing_protection=_STATE["cfg"]["protect"], vario_seed=seed, seed=seed)
     if kind == "mc":
         return MacCreadyPilot(macready=setting, wind_aware=wind_aware)
     return PlannedClimbPilot(macready=setting, planner=_STATE[kind], motor_in_climbs=False,
@@ -103,6 +115,7 @@ def make_task(instance: int):
 
 def run(job):
     instance, name = job
+    _STATE["instance"] = instance
     task = make_task(instance)
     recorder = _STATE["ga"].recorder if "ga" in _STATE else None
     if recorder is not None:
@@ -117,7 +130,7 @@ def run(job):
         "climbs": f.climbs, "climb_rate": float(np.mean(rates)) if rates else None,
         "climb_time": float(sum(c["t1"] - c["t0"] for c in f.climbs)),
         "violated": f.violated, "stalled": f.stalled, "wall": time.perf_counter() - tic,
-        "records": list(recorder) if name.startswith("ga") and recorder is not None else [],
+        "records": list(recorder) if name.lstrip("b").startswith("ga") and recorder is not None else [],
     }
 
 
@@ -171,6 +184,8 @@ def main() -> None:
     parser.add_argument("--wind-aware", type=int, choices=(0, 1), help="tactician counts the wind in its glides "
                         "and looks for thermals again when low on the motor (default: 1 with --weather, else 0)")
     parser.add_argument("--search-budget", type=int, default=1_000)
+    parser.add_argument("--use-z-i", action="store_true", help="planners model the thermal with its real layer depth "
+                        "(the forecast's) instead of the training family's 1000 m")
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--depth", type=int, default=3)
     parser.add_argument("--workers", type=int, default=os.cpu_count())
@@ -180,12 +195,12 @@ def main() -> None:
 
     cfg = {"distance": args.distance, "search_budget": args.search_budget, "width": args.width, "depth": args.depth,
            "protect": args.protect if args.protect > 0 else None, "flow": str(args.flow) if args.flow else None,
-           "record": args.record, "weather": str(args.weather) if args.weather else None,
+           "record": args.record, "use_z_i": args.use_z_i, "weather": str(args.weather) if args.weather else None,
            "wind_aware": bool(args.weather) if args.wind_aware is None else bool(args.wind_aware)}
-    if not args.flow and any(p.startswith("fast") for p in args.pilots):
-        args.pilots = [p for p in args.pilots if not p.startswith("fast")]
+    if not args.flow and any(p.lstrip("b").startswith("fast") for p in args.pilots):
+        args.pilots = [p for p in args.pilots if not p.lstrip("b").startswith("fast")]
         print("no --flow: the fast pilots are left out", flush=True)
-    planned = [p for p in args.pilots if p not in ("motor", "mc0.5", "mc1")]
+    planned = [p for p in args.pilots if p not in ("motor", "mc0.5", "mc1", "bmc0.5", "bmc1")]
     if planned and args.vae is None:
         parser.error(f"--vae is needed by {planned}")
     state = None
@@ -193,8 +208,9 @@ def main() -> None:
         import torch
 
         state = torch.load(args.vae, weights_only=False, map_location="cpu")
-    slow_first = {"ga1": 0, "safe1": 1, "ga0.5": 2, "safe0.5": 3, "fast1": 4, "fast0.5": 5, "prior0.5": 6,
-                  "mc0.5": 7, "mc1": 8, "motor": 9}
+    slow_first = {"bnmpc1": -4, "bnmpc0.5": -3, "bga1": -2, "bga0.5": -1, "ga1": 0, "safe1": 1, "ga0.5": 2,
+                  "safe0.5": 3, "fast1": 4, "fast0.5": 5, "bfast1": 4, "bfast0.5": 5, "prior0.5": 6,
+                  "mc0.5": 7, "mc1": 8, "bmc0.5": 7, "bmc1": 8, "motor": 9}
     jobs = sorted(((i, p) for i in range(args.first, args.first + args.tasks) for p in args.pilots),
                   key=lambda j: slow_first[j[1]])
     print(f"{args.tasks} tasks of {args.distance / 1000:g} km x {len(args.pilots)} pilots = {len(jobs)} flights, "

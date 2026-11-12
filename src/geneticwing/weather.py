@@ -29,7 +29,7 @@ import numpy as np
 
 from geneticwing.crosscountry import ThermalField, XCTask
 from geneticwing.wind.base import UniformWind, WindField
-from geneticwing.wind.thermal import Thermal
+from geneticwing.wind.thermal import EnvironmentSink, Thermal, allen_radius, allen_updraft, thermal_density
 
 API = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 SITES = {"issoudun": (46.89, 2.04)}  # Issoudun-Le Fay gliding centre, flat country in the Centre region of France
@@ -165,69 +165,13 @@ class ConvectiveDay:
 
 # -- thermals and tasks on a real day ------------------------------------------------------------------
 
-def _r2(z, z_i):
-    """Allen's outer updraft radius, Eq. (12)."""
-    ratio = np.clip(np.asarray(z, float) / z_i, 0.0, None)
-    return np.maximum(10.0, 0.102 * np.cbrt(ratio) * (1.0 - 0.25 * ratio) * z_i)
-
-
-# Allen's shape constants k1..k4 by r1/r2 (Table 3, with k4 as in his MATLAB code, Appendix B).
-_R1R2 = np.array([0.14, 0.25, 0.36, 0.47, 0.58, 0.69, 0.80])
-_K = np.array([[1.5352, 2.5826, -0.0113, -0.1950], [1.5265, 3.6054, -0.0176, -0.1265],
-               [1.4866, 4.8356, -0.0320, -0.0818], [1.2042, 7.7904, 0.0848, -0.0445],
-               [0.8816, 13.9720, 0.3404, -0.0216], [0.7067, 23.9940, 0.5689, -0.0099],
-               [0.6189, 42.7965, 0.7157, -0.0033]])
-
-
-def allen_updraft(r, z, w_star, z_i):
-    """Allen's updraft (NASA/TM-2006-214382, Eqs. 11-18 as in his MATLAB code): bell-shaped core and,
-    above half the layer, a downdraft ring. ``r`` is the distance to the core, all arrays broadcast."""
-    ratio = np.clip(np.asarray(z, float) / z_i, 0.0, None)
-    w_bar = w_star * np.cbrt(ratio) * (1.0 - 1.1 * ratio)
-    r2 = np.maximum(10.0, 0.102 * np.cbrt(ratio) * (1.0 - 0.25 * ratio) * z_i)
-    r1r2 = np.where(r2 < 600.0, 0.0011 * r2 + 0.14, 0.8)
-    r1 = r1r2 * r2
-    w_peak = 3.0 * w_bar * (r2**3 - r2**2 * r1) / (r2**3 - r1**3)
-    k = _K[np.abs(r1r2[..., None] - _R1R2).argmin(axis=-1)]
-    rr = r / r2
-    shape = np.clip(1.0 / (1.0 + (k[..., 0] * np.abs(rr + k[..., 2])) ** k[..., 1]) + k[..., 3] * rr, 0.0, None)
-    ring = np.where((r > r1) & (rr < 2.0), np.pi / 6.0 * np.sin(np.pi * rr), 0.0)
-    s_wd = np.where((ratio > 0.5) & (ratio <= 0.9), 2.5 * (ratio - 0.5), 0.0)
-    w = shape * w_peak + np.minimum(s_wd * ring, 0.0) * w_bar
-    return np.where((ratio > 0.0) & (ratio < 1.0), w, 0.0)
-
-
-def thermal_density(z_i):
-    """Thermals per m^2, Allen's Eq. (20) N = 0.6 X Y / (z_i r2), with r2 at z = 0.4 z_i (Lenschow's height)."""
-    return 0.6 / (z_i * _r2(0.4 * z_i, z_i))
+_r2 = allen_radius  # kept for scenarios/weather_view.py
 
 
 def envelope(s):
     """Strength through a thermal's life, ``s`` from 0 (birth) to 1 (death): a fifth to grow, a fifth to fade."""
     s = np.asarray(s, float)
     return np.clip(np.minimum(s, 1.0 - s) / 0.2, 0.0, 1.0) * ((s >= 0.0) & (s <= 1.0))
-
-
-@dataclass(frozen=True)
-class EnvironmentSink:
-    """Sinking air between the thermals that returns their mass flux (Allen's MATLAB code, after Eq. 21).
-
-    w_e(z) = -A_t w_bar / (A - A_t), with A_t / A = n pi r2(z)^2 the area fraction of the updrafts.
-    """
-
-    density: float  # thermals per m^2
-    w_star: float
-    z_i: float
-
-    def __call__(self, position, t=0.0):
-        position = np.asarray(position, float)
-        z = position[..., 2]
-        ratio = np.clip(z / self.z_i, 0.0, None)
-        w_bar = np.clip(self.w_star * np.cbrt(ratio) * (1.0 - 1.1 * ratio), 0.0, None)
-        frac = np.clip(self.density * np.pi * _r2(z, self.z_i) ** 2, 0.0, 0.5)
-        out = np.zeros(position.shape)
-        out[..., 2] = np.where((z > 0.0) & (z < self.z_i), -frac * w_bar / (1.0 - frac), 0.0)
-        return out
 
 
 @dataclass(frozen=True)

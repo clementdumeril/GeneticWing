@@ -37,7 +37,8 @@ from dataclasses import dataclass, field, fields, replace
 
 import numpy as np
 
-from geneticwing.benchmarks import MOTOR_THRUST, canonical_scenario, heading_frame_context, with_margins
+from geneticwing.benchmarks import (MOTOR_THRUST, WEATHER_CONTEXT_DIM, canonical_scenario, heading_frame_context,
+                                    with_margins)
 from geneticwing.flatness import FlatState, flat_state
 from geneticwing.planning.local import solve_local
 from geneticwing.policies import law_seeds, seed_theta, simulate_law
@@ -258,11 +259,32 @@ class _CommandPlanner:
     def __init__(self, vae, cfg):
         self.vae, self.cfg = vae, cfg
 
+    use_z_i: bool = False  # plan with the situation's thermal depth (else the family's 1000 m, as trained)
+
+    @property
+    def weather(self) -> bool:
+        """Trained on the weather family: 7-term context with z_i, Allen's thermal profile and sink."""
+        return getattr(self.vae, "context_dim", 6) == WEATHER_CONTEXT_DIM
+
     def _problem(self, scenario: SoaringScenario):
+        if self.weather:  # the situation's thermal is taken with Allen's profile, at its own z_i
+            context = heading_frame_context(scenario, weather=True)
+            cfg = replace(self.cfg, initial_airspeed=scenario.airspeed)
+            canonical = canonical_scenario(context, airspeed=scenario.airspeed, strip_wing=scenario.strip_wing,
+                                           aircraft=scenario.aircraft, horizon=scenario.horizon)
+            if self.cl_margin is not None:
+                canonical = replace(canonical, cl_margin=self.cl_margin)
+            return context, cfg, SoaringProblem(canonical)
         context = heading_frame_context(scenario)
         cfg = replace(self.cfg, initial_airspeed=scenario.airspeed)
         canonical = canonical_scenario(context, airspeed=scenario.airspeed, strip_wing=scenario.strip_wing,
                                        aircraft=scenario.aircraft, horizon=scenario.horizon)
+        if self.use_z_i:
+            from geneticwing.torchsim import canonical_wind
+
+            z_i = next(c for c in scenario.wind.components if isinstance(c, Thermal)).z_i
+            cfg = replace(cfg, z_i=float(z_i))
+            canonical = replace(canonical, wind=canonical_wind(context, z_i))
         if self.cl_margin is not None:
             canonical = replace(canonical, cl_margin=self.cl_margin)
         return context, cfg, SoaringProblem(canonical)
@@ -428,12 +450,17 @@ def fly_closed_loop(
     config: LoopConfig = LoopConfig(),
     rng: np.random.Generator | None = None,
     initial: tuple[np.ndarray, np.ndarray, float, float, float] | None = None,
+    on_segment=None,
 ) -> Flight:
     """Fly ``situation`` in ``air`` for ``config.duration`` seconds, replanning in ``belief``.
 
     ``initial = (velocity, acceleration, C_L, bank, thrust)`` starts the flight from
     a state reached in flight (a cross-country climb) instead of level flight;
     the first plan then starts from it too.
+
+    ``on_segment(t0, segment)``, called after every flown segment (its clock
+    starting at ``t0``), may return a new :class:`Belief` for the next plan: an
+    estimator of the thermal fed by what the aircraft measured on the way.
     """
     rng = np.random.default_rng(0) if rng is None else rng
     ac = situation.aircraft
@@ -463,6 +490,10 @@ def fly_closed_loop(
                                 max_duration=span, initial_attitude=attitude, extra_drag=extra_drag,
                                 cl_limit=cl_limit)
         pieces.append((seg, t0))
+        if on_segment is not None:
+            updated = on_segment(t0, seg)
+            if updated is not None:
+                belief = updated
         p, v, a = seg.position[-1], seg.velocity[-1], seg.acceleration[-1]
         attitude = (float(seg.cl[-1]), float(seg.bank[-1]))
         start = Start(attitude[0], attitude[1], float(np.clip(seg.thrust_required[-1], 0.0, thrust_max)),
