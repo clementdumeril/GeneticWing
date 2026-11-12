@@ -9,8 +9,11 @@ strip_flag=()
 if [ "${STRIP:-0}" = "1" ]; then
     strip_flag=(--strip)
 fi
-if [ "${FAMILY:-s1}" != "s1" ]; then  # the teacher's family: s1, or weather (real-weather ranges, Allen's thermal)
-    strip_flag+=(--family "$FAMILY")
+# The teacher's family: s1, or weather (real-weather ranges, Allen's thermal). Only phase3_dataset.py takes it;
+# the later steps read the family from the context size (7 terms = weather).
+family_flag=()
+if [ "${FAMILY:-s1}" != "s1" ]; then
+    family_flag=(--family "$FAMILY")
 fi
 mkdir -p "$DATA/shards" "$DATA/logs"
 

@@ -7,4 +7,4 @@
 set -euo pipefail
 source slurm/common.sh
 
-run python scenarios/phase3_dataset.py ${strip_flag[@]+"${strip_flag[@]}"} --tune-law-only --out "$DATA"
+run python scenarios/phase3_dataset.py ${strip_flag[@]+"${strip_flag[@]}"} ${family_flag[@]+"${family_flag[@]}"} --tune-law-only --out "$DATA"
