@@ -1,0 +1,12 @@
+pilot     arrived   cost battery kJ   km/h climbs climb m/s no violation stalled
+motor        100%   1.28       89.3   29.3    0.0       nan         100%      0%
+mc0.5        100%   0.05        0.4   27.2    3.9      2.50         100%      0%
+mc1          100%   0.08        0.5   28.5    4.1      2.52         100%      0%
+bmc0.5        98%   0.30       17.2   26.1    5.6      1.10         100%      0%
+bmc1         100%   0.83       45.2   32.9    4.8      1.19          96%      0%
+fast0.5       98%   0.08        0.9   26.8    3.8      2.37          88%      0%
+fast1        100%   0.09        0.4   28.6    4.2      2.46          92%      0%
+bfast0.5      94%   0.20       11.8   24.7    5.5      1.13         100%      0%
+bfast1       100%   0.49       25.2   29.3    4.6      1.39          98%      0%
+fast0.5 - mc0.5 on 48 tasks: cost +0.028 (better on 54 %), speed -0.43 km/h (faster on 60 %)
+fast1 - mc1 on 48 tasks: cost +0.016 (better on 50 %), speed +0.11 km/h (faster on 56 %)
