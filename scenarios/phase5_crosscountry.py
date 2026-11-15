@@ -87,6 +87,7 @@ def _init_worker(vae_state, cfg):
 
 def make_pilot(name: str):
     wind_aware = bool(_STATE["cfg"].get("wind_aware"))
+    late = _STATE["cfg"].get("deadline_margin")  # None: the published runs' tactician
     if name == "motor":
         return MotorPilot(wind_aware=wind_aware)
     kind = name.rstrip("0123456789.")
@@ -100,9 +101,10 @@ def make_pilot(name: str):
         return BlindPlannedPilot(macready=setting, planner=_STATE[kind[1:]], motor_in_climbs=False,
                                  inner_wing_protection=_STATE["cfg"]["protect"], vario_seed=seed, seed=seed)
     if kind == "mc":
-        return MacCreadyPilot(macready=setting, wind_aware=wind_aware)
+        return MacCreadyPilot(macready=setting, wind_aware=wind_aware, deadline_margin=late)
     return PlannedClimbPilot(macready=setting, planner=_STATE[kind], motor_in_climbs=False,
-                             inner_wing_protection=_STATE["cfg"]["protect"], wind_aware=wind_aware)
+                             inner_wing_protection=_STATE["cfg"]["protect"], wind_aware=wind_aware,
+                             deadline_margin=late)
 
 
 def make_task(instance: int):
@@ -183,6 +185,8 @@ def main() -> None:
                         "geneticwing.weather.fetch_day (data/weather/<site>_<date>.npz)")
     parser.add_argument("--wind-aware", type=int, choices=(0, 1), help="tactician counts the wind in its glides "
                         "and looks for thermals again when low on the motor (default: 1 with --weather, else 0)")
+    parser.add_argument("--deadline-margin", type=float, help="wind-aware tactician: motor on toward the goal when "
+                        "the time left is just enough to motor there, plus this margin in s (default: never)")
     parser.add_argument("--search-budget", type=int, default=1_000)
     parser.add_argument("--use-z-i", action="store_true", help="planners model the thermal with its real layer depth "
                         "(the forecast's) instead of the training family's 1000 m")
@@ -196,7 +200,8 @@ def main() -> None:
     cfg = {"distance": args.distance, "search_budget": args.search_budget, "width": args.width, "depth": args.depth,
            "protect": args.protect if args.protect > 0 else None, "flow": str(args.flow) if args.flow else None,
            "record": args.record, "use_z_i": args.use_z_i, "weather": str(args.weather) if args.weather else None,
-           "wind_aware": bool(args.weather) if args.wind_aware is None else bool(args.wind_aware)}
+           "wind_aware": bool(args.weather) if args.wind_aware is None else bool(args.wind_aware),
+           "deadline_margin": args.deadline_margin}
     if not args.flow and any(p.lstrip("b").startswith("fast") for p in args.pilots):
         args.pilots = [p for p in args.pilots if not p.lstrip("b").startswith("fast")]
         print("no --flow: the fast pilots are left out", flush=True)

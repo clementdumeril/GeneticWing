@@ -271,6 +271,11 @@ class MacCreadyPilot:
     # Off by default (the published phase 5-6 runs): count the wind in the glides to a thermal (height lost and
     # time over the ground), and keep looking for a thermal while on the motor in a final glide.
     wind_aware: bool = False
+    # Wind-aware only. Start the motor toward the goal as soon as the time left is just enough to motor there
+    # (plus this margin, s), and keep it on until a safe final glide. None (the published runs): the motor only
+    # holds the floor. Soaring into a strong headwind can be slower than the time limit allows (22 Jun 2025:
+    # 2.3 m/s made good where 3.5 m/s was needed), and nothing else tells the tactician it will not make it.
+    deadline_margin: float | None = None
 
     def __post_init__(self):
         self.reset()
@@ -280,6 +285,19 @@ class MacCreadyPilot:
         self._checked = -1e9
         self.history = []  # (t, z) while climbing
         self.motor_on = False
+        self.late = False  # the deadline rule has started the motor toward the goal
+
+    def behind_schedule(self, task: XCTask, t: float, p: np.ndarray) -> bool:
+        """Whether motoring straight to the goal now only just beats the time limit (``deadline_margin``)."""
+        if self.deadline_margin is None or not self.wind_aware:
+            return False
+        goal = np.asarray(task.goal)
+        to_goal = float(np.linalg.norm(goal - p[:2]))
+        u = (goal - p[:2]) / max(to_goal, 1.0)
+        v = self.motor_airspeed(task, p, goal)
+        along, cross = float(np.dot(task.wind, u)), float(task.wind[0] * u[1] - task.wind[1] * u[0])
+        ground = np.sqrt(max(v**2 - cross**2, 0.0)) + along
+        return ground > 0.5 and to_goal / ground > task.time_limit - t - self.deadline_margin
 
     # Where the pilot believes a thermal is (the forecast); a subclass can make it wrong.
     def thermal_center(self, task: XCTask, i: int, t: float) -> np.ndarray:
@@ -378,8 +396,17 @@ class MacCreadyPilot:
         ac = task.aircraft
         if self.target is None:
             self.target = self.choose_target(task, t, p)
+        if not self.late and self.behind_schedule(task, t, p):
+            self.late = True  # out of time for soaring: motor on toward the goal, leaving any climb
+            if self.mode == "climb":
+                self.climbs.append({"thermal": self.target, "t0": self.climb_start[0], "z0": self.climb_start[1],
+                                    "t1": t, "z1": float(p[2])})
+                self.visited.add(self.target)
+            self.mode, self.target = "glide", -1
+        if self.late:  # above floor + 80 m the motor only holds the airspeed in the descent: it costs ~nothing
+            self.motor_on = not self.final_glide_ok(task, p)
         # Motor below the floor (hysteresis), whatever else is going on.
-        if p[2] < task.z_floor:
+        elif p[2] < task.z_floor:
             self.motor_on = True
         elif p[2] > task.z_floor + 60.0:
             self.motor_on = False
@@ -419,7 +446,7 @@ class MacCreadyPilot:
             # (wind-aware: only a safe final glide counts; -1 also means "no thermal in reach")
             if (self.final_glide_ok(task, p) if self.wind_aware else self.choose_target(task, t, p) == -1):
                 self.target, aim = -1, goal
-        elif self.wind_aware and self.motor_on and t - getattr(self, "_checked", -1e9) > 10.0:
+        elif self.wind_aware and self.motor_on and not self.late and t - getattr(self, "_checked", -1e9) > 10.0:
             self._checked = t  # low on the motor toward the goal: take a thermal as soon as one is in reach
             target = self.choose_target(task, t, p, powered=True)
             if target != -1:

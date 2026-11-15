@@ -43,3 +43,14 @@ def test_macready_pilot_climbs_and_saves_battery():
     assert glider.arrived and glider.climbs
     assert glider.battery < 0.5 * motor.battery
     assert all(c["z1"] > c["z0"] for c in glider.climbs[:-1])
+
+
+def test_deadline_rule_starts_the_motor_only_when_soaring_cannot_make_it():
+    task = replace(xc_family(3, distance=8_000.0), wind=(-5.0, 0.0), time_limit=3_000.0)  # headwind
+    p = np.array([0.0, 0.0, 300.0])
+    off = MacCreadyPilot(macready=1.0, wind_aware=True)
+    late = MacCreadyPilot(macready=1.0, wind_aware=True, deadline_margin=300.0)
+    assert not off.behind_schedule(task, 2_500.0, p)  # the published tactician never motors for time
+    assert not late.behind_schedule(task, 0.0, p)  # 8 km of headwind on the motor fit in 3,000 s
+    assert late.behind_schedule(task, 2_500.0, p)  # not in the 500 s left
+    assert not late.behind_schedule(task, 2_500.0, np.array([7_950.0, 0.0, 300.0]))  # 50 m from the goal
