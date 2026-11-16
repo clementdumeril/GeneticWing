@@ -411,6 +411,13 @@ class LoopConfig:
     tracker: TrackerConfig = field(default_factory=lambda: TrackerConfig(
         powered=True, thrust_max=MOTOR_THRUST, cl_max_fraction=0.9, bank_max_deg=40.0))
     inner_wing_protection: float | None = None  # with a strip wing: keep every section below this fraction of its stall
+    # A geneticwing.sixdof.SixDofAirframe: fly the plans with the 6-DOF airframe and its autopilot instead of the
+    # point mass (the planners still plan with the point mass).
+    sixdof: object | None = None
+    sixdof_gains: object | None = None
+    # The path tracker for the 6-DOF airframe (None: geneticwing.sixdof.SIXDOF_TRACKER, softer lateral and speed loops
+    # tuned for its slower roll; the point mass keeps `tracker`).
+    sixdof_tracker: TrackerConfig | None = None
 
 
 @dataclass
@@ -421,6 +428,7 @@ class Flight:
     plans: list[Plan]
     plan_seconds: list[float]
     violated: list[str]  # constraints exceeded by more than FLIGHT_TOLERANCE
+    sixdof: dict | None = None  # 6-DOF flights: angle of attack, sideslip, roll rate, surface use
 
     @property
     def feasible(self) -> bool:
@@ -478,6 +486,12 @@ def fly_closed_loop(
     cl_limit = None
     if wing is not None and config.inner_wing_protection is not None:
         cl_limit = lambda va, bank, cl: protected_cl(wing, ac, va, bank, cl, config.inner_wing_protection)  # noqa: E731
+    plant, tracker = None, config.tracker
+    if config.sixdof is not None:
+        from geneticwing.sixdof import AutopilotGains, SixDofPlant, sixdof_tracker
+
+        plant = SixDofPlant(config.sixdof, config.sixdof_gains or AutopilotGains())
+        tracker = config.sixdof_tracker or sixdof_tracker(config.tracker)
     t0, pieces, plans, seconds = 0.0, [], [], []
     while config.duration - t0 > 2.0 * config.dt:
         tic = time.perf_counter()
@@ -486,9 +500,9 @@ def fly_closed_loop(
         seconds.append(time.perf_counter() - tic)
         plans.append(plan)
         span = left if config.replan_every is None else min(config.replan_every, left)
-        seg = simulate_tracking(ac, plan.reference, Shifted(air, t0), p, v, config.tracker, dt=config.dt,
+        seg = simulate_tracking(ac, plan.reference, Shifted(air, t0), p, v, tracker, dt=config.dt,
                                 max_duration=span, initial_attitude=attitude, extra_drag=extra_drag,
-                                cl_limit=cl_limit)
+                                cl_limit=cl_limit, plant=plant)
         pieces.append((seg, t0))
         if on_segment is not None:
             updated = on_segment(t0, seg)
@@ -507,8 +521,12 @@ def fly_closed_loop(
     pos, vel, acc = (np.concatenate([getattr(piece, name)[(i > 0):] for i, (piece, _) in enumerate(pieces)])
                      for name in ("position", "velocity", "acceleration"))
     state = flat_state(ac, t[None], pos[None], vel[None], acc[None], air(pos, t)[None])
+    if plant is not None:  # score the motor's actual thrust, not the point mass's reading of the flight
+        spent = np.concatenate([piece.thrust_required[(i > 0):] for i, (piece, _) in enumerate(pieces)])
+        state = replace(state, thrust_required=spent[None])
     problem = SoaringProblem(replace(situation, wind=air, horizon=float(t[-1])))
     ev = problem.score(state)
     hinges = problem.hinges(state)
     violated = [name for name in SoaringProblem.CONSTRAINTS if np.max(hinges[name]) > FLIGHT_TOLERANCE]
-    return Flight(state, ev, bool(stall_flags(problem, state)[0]), plans, seconds, violated)
+    return Flight(state, ev, bool(stall_flags(problem, state)[0]), plans, seconds, violated,
+                  None if plant is None else plant.summary())

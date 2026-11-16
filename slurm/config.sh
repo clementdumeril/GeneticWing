@@ -108,3 +108,9 @@ WEATHER_TEST_TASKS=48            # tasks 0..47 of each day: the test set (the ql
 WEATHER_COLLECT_FIRST=1000       # DAgger tasks 1000.. of each day: never tested on
 WEATHER_COLLECT_TASKS=24
 TIME_WEATHER_STEP="08:00:00"
+
+# --- 6-DOF check (sbatch ... slurm/sixdof.sbatch, PHASE3_NAME=phase3_weather) ---------
+# The 80 test situations, each climb planned with the point mass and flown by the point mass and by the
+# rigid-body SB-XC (scenarios/sixdof_compare.py). A 6-DOF minute costs about 15 s of one core.
+SIXDOF_COUNT=80
+TIME_SIXDOF="08:00:00"

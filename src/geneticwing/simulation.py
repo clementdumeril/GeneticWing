@@ -23,7 +23,7 @@ the integrated states, so the same metrics apply to plans and to flights.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -102,6 +102,7 @@ def simulate_tracking(
     initial_attitude: tuple[float, float] | None = None,
     extra_drag=None,
     cl_limit=None,
+    plant=None,
 ) -> FlatState:
     """Fly ``reference`` (a densely sampled plan) until its end point is passed.
 
@@ -112,6 +113,14 @@ def simulate_tracking(
     drag the point mass does not have, e.g. the aileron drag of a strip wing,
     and ``cl_limit(airspeed, bank, cl)`` caps the C_L command further, e.g. to
     keep a strip wing's inner sections from stalling.
+
+    ``plant`` (a :class:`geneticwing.sixdof.SixDofPlant`) replaces the point
+    mass and its attitude lag: the C_L, bank and thrust commands go to the
+    6-DOF airframe's autopilot, which flies them with its own surfaces and
+    inertia, and its aerodynamics replace ``extra_drag``. The returned state's
+    ``thrust_required`` is then the motor's actual thrust (less ``extra_drag``,
+    which the scorer adds back for a strip wing), so a flight is scored on the
+    energy its motor really spent.
     """
     max_duration = 2.0 * float(reference.t[-1]) if max_duration is None else max_duration
     steps = int(round(max_duration / dt))
@@ -130,6 +139,9 @@ def simulate_tracking(
     if initial_attitude is not None:
         cl, bank = (float(x) for x in initial_attitude)
     thrust_max = aircraft.max_thrust if config.thrust_max is None else config.thrust_max
+    motor = np.zeros(steps + 1)
+    if plant is not None:
+        plant.begin(p[0], v[0], wind, 0.0, cl, bank)
     k = 0
     for k in range(steps + 1):
         t = k * dt
@@ -153,6 +165,21 @@ def simulate_tracking(
         target = float(np.clip(float(c.cl), 0.0, config.cl_max_fraction * aircraft.cl_max))
         if cl_limit is not None:
             target = float(cl_limit(airspeed, bank, target))
+        if plant is not None:
+            # The bank command is shaped to the roll rate the airframe can hold (the point mass's limiter, at the
+            # airframe's own rate): the path loop then never asks for a roll the airframe cannot follow.
+            bank_rate_plant = min(bank_rate_max, plant.gains.roll_rate_max)
+            bank_step = alpha * (np.clip(float(c.bank), -bank_max, bank_max) - bank)
+            bank_target = bank + float(np.clip(bank_step, -bank_rate_plant * dt, bank_rate_plant * dt))
+            thrust = np.clip(float(c.thrust_required), 0.0, thrust_max) if config.powered else 0.0
+            motor[k] = thrust
+            p_next, v_next, acc[k] = plant.step(wind, t, dt, target, bank_target, thrust)
+            bank = bank_target
+            passed_end = idx == last and (p[k] - reference.position[last]) @ end_tangent >= 0.0
+            if passed_end or k == steps:
+                break
+            p[k + 1], v[k + 1] = p_next, v_next
+            continue
         cl += alpha * (target - cl)
         bank_step = alpha * (np.clip(float(c.bank), -bank_max, bank_max) - bank)
         bank += np.clip(bank_step, -bank_rate_max * dt, bank_rate_max * dt)
@@ -174,4 +201,10 @@ def simulate_tracking(
 
     n = k + 1
     t = np.arange(n) * dt
-    return flat_state(aircraft, t, p[:n], v[:n], acc[:n], wind(p[:n], t))
+    state = flat_state(aircraft, t, p[:n], v[:n], acc[:n], wind(p[:n], t))
+    if plant is not None:
+        spent = motor[:n]
+        if extra_drag is not None:
+            spent = spent - np.array([float(extra_drag(va, b, c)) for va, b, c in zip(state.airspeed, state.bank, state.cl)])
+        state = replace(state, thrust_required=spent)
+    return state
